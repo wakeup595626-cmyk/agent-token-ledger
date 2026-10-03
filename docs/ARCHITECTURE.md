@@ -46,7 +46,7 @@ AgentTokenLedger.exe
 
 ## 界面语言
 
-界面翻译目录内置在 `web/app.js`，当前提供八种语言：zh-CN、zh-TW、en-US、ja-JP、ko-KR、de-DE、fr-FR、es-ES。`preferences.py` 的 `SUPPORTED_LANGUAGES` 与之对应，非法语言码回退为 zh-CN。`runtime.js` 根据当前语言本地化金额、数字与星期标签。
+界面翻译目录内置在 `web/app.js`，该文件只承载翻译目录；应用运行时统一由 `web/runtime.js` 提供。当前提供八种语言：zh-CN、zh-TW、en-US、ja-JP、ko-KR、de-DE、fr-FR、es-ES。`preferences.py` 的 `SUPPORTED_LANGUAGES` 与之对应，非法语言码回退为 zh-CN。设置页的“界面语言”下拉框在 `web/index.html` 内直接渲染这八种选项，`runtime.js` 负责保存选择、切换整页文案，并本地化金额、数字与星期标签。
 
 ## 统计口径
 

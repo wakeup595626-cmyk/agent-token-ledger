@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import tempfile
 import threading
 import time
@@ -10,17 +11,37 @@ from pathlib import Path
 from unittest import mock
 
 from agent_token_ledger.model import SourceKind, UsageEvent
-from agent_token_ledger.preferences import PreferenceStore
+from agent_token_ledger.preferences import SUPPORTED_LANGUAGES, PreferenceStore
 from agent_token_ledger.webapp import (
     APP_VERSION,
     DASHBOARD_HTML,
     LedgerService,
     ScanPayload,
+    WEB_DIR,
     create_server,
 )
 
 
 class WebappTests(unittest.TestCase):
+    def test_dashboard_language_select_lists_every_supported_language(self) -> None:
+        match = re.search(
+            r'<select[^>]*id="languageSelect"[^>]*>(.*?)</select>',
+            DASHBOARD_HTML,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(match, "界面语言下拉框必须出现在仪表盘中")
+        values = set(re.findall(r'value="([^"]+)"', match.group(1)))
+        self.assertEqual(values, SUPPORTED_LANGUAGES)
+
+    def test_translation_catalog_covers_every_supported_language(self) -> None:
+        app_js = (WEB_DIR / "app.js").read_text(encoding="utf-8")
+        for code in sorted(SUPPORTED_LANGUAGES):
+            self.assertIn(
+                f'"{code}": {{',
+                app_js,
+                f"翻译目录缺少 {code} 语言块",
+            )
+
     def test_service_builds_three_scopes_and_runtime_summary(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             service = LedgerService(
