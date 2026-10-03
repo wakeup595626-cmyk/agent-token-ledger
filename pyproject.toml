@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-token-ledger"
+version = "1.0.0"
+description = "只读统计本机智能体工具 Token 用量的中文桌面应用"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [
+    { name = "Agent Token Ledger Contributors" },
+]
+keywords = ["token", "usage", "agent", "codex", "desktop", "windows"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Win32 (MS Windows)",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Utilities",
+]
+dependencies = []
+
+[project.optional-dependencies]
+desktop = ["pywebview>=5.4,<7"]
+
+[project.scripts]
+agent-token-ledger = "agent_token_ledger.cli:main"
+agent-token-ledger-web = "agent_token_ledger.app:main"
+
+[project.urls]
+Homepage = "https://github.com/wakeup595626-cmyk/agent-token-ledger"
+Repository = "https://github.com/wakeup595626-cmyk/agent-token-ledger"
+Issues = "https://github.com/wakeup595626-cmyk/agent-token-ledger/issues"
+Releases = "https://github.com/wakeup595626-cmyk/agent-token-ledger/releases"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+agent_token_ledger = ["web/*"]

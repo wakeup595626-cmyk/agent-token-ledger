@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>智能体用量账本</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="主导航" data-i18n-aria-label="nav.main">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 64 64" fill="none">
+            <defs>
+              <linearGradient id="brandTile" x1="10" y1="6" x2="54" y2="58" gradientUnits="userSpaceOnUse">
+                <stop offset="0" stop-color="#1eb09e"/>
+                <stop offset="1" stop-color="#0b5854"/>
+              </linearGradient>
+            </defs>
+            <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#brandTile)"/>
+            <rect x="16" y="16" width="32" height="32" rx="9" fill="#f8fdfc" stroke="#cee9e4" stroke-width="0.9"/>
+            <rect x="20.5" y="36" width="5.6" height="8" rx="2.4" fill="#14a08f"/>
+            <rect x="29.2" y="30" width="5.6" height="14" rx="2.4" fill="#0f766e"/>
+            <rect x="37.9" y="23.5" width="5.6" height="20.5" rx="2.4" fill="#f59e0b"/>
+            <rect x="19" y="45.4" width="26" height="1.5" rx="0.75" fill="#d6eee9"/>
+            <circle cx="48" cy="48" r="9.4" fill="#ffffff"/>
+            <circle cx="48" cy="48" r="7.2" fill="#f59e0b"/>
+            <circle cx="48" cy="48" r="2.7" fill="#ffffff"/>
+          </svg>
+        </div>
+        <div class="brand-copy">
+          <h1 data-i18n="app.name">智能体用量账本</h1>
+          <p data-i18n="app.localOnly">本机只读统计</p>
+        </div>
+      </div>
+
+      <p class="nav-caption" data-i18n="nav.sectionData">统计中心</p>
+      <nav class="nav-list">
+        <button class="nav-item active" type="button" data-page="overview" aria-current="page">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          <span data-i18n="nav.overview">总览</span>
+        </button>
+        <button class="nav-item" type="button" data-page="usage">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
+          <span data-i18n="nav.usage">用量明细</span>
+        </button>
+        <button class="nav-item" type="button" data-page="sources">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.7 9a1 1 0 0 1-.6 0C7.5 20.5 4 18 4 13V5l8-3 8 3z"/><path d="m9 12 2 2 4-4"/></svg>
+          <span data-i18n="nav.sources">本机来源检测</span>
+        </button>
+        <button class="nav-item" type="button" data-page="quality">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 3 7v5c0 5 3.8 8.4 9 9 5.2-.6 9-4 9-9V7z"/><path d="M8 12h8M12 8v8"/></svg>
+          <span data-i18n="nav.quality">数据质量</span>
+        </button>
+        <button class="nav-item" type="button" data-page="settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1z"/></svg>
+          <span data-i18n="nav.settings">设置</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-foot">
+        <div class="privacy-badge">
+          <svg class="privacy-icon" viewBox="0 0 44 44" fill="none" aria-hidden="true">
+            <ellipse cx="20" cy="12" rx="11" ry="5" stroke="currentColor" stroke-width="2"/>
+            <path d="M9 12v9c0 2.8 4.9 5 11 5 2.5 0 4.8-.3 6.6-.9M9 21v8c0 2.8 4.9 5 11 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="m26 26 7 2v5.2c0 4.1-2.8 6.8-7 8.3-4.2-1.5-7-4.2-7-8.3V28z" fill="var(--teal-soft)" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+            <path d="m23.4 33 1.7 1.7 3.7-3.7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <div>
+            <strong data-i18n="app.privacyTitle">本地只读运行</strong>
+            <span data-i18n="app.privacyShort">数据只保存在当前电脑</span>
+          </div>
+        </div>
+        <div class="sidebar-version-row">
+          <span data-i18n="app.versionLabel">版本</span>
+          <strong id="sidebarVersion">—</strong>
+        </div>
+      </div>
+    </aside>
+
+    <div class="workspace">
+      <header class="topbar">
+        <div class="page-heading">
+          <h2 id="pageTitle">总览</h2>
+          <p id="pageSubtitle">查看总体令牌、费用和分项趋势</p>
+        </div>
+        <div class="top-actions">
+          <span id="statusPill" class="status-pill" aria-live="polite">启动中</span>
+          <button id="refreshButton" class="button primary" type="button" data-i18n-title="action.refreshTitle">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 5v4h4"/><path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 19v-4h-4"/></svg>
+            <span class="btn-label" data-i18n="action.refresh">立即刷新</span>
+          </button>
+          <button id="pauseButton" class="button" type="button" data-i18n-title="action.pauseTitle" aria-pressed="false">
+            <svg class="icon pause-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path class="pause-glyph" d="M8 5v14M16 5v14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+              <path class="resume-glyph" d="M8.2 5.2 19 12 8.2 18.8z" fill="currentColor"/>
+            </svg>
+            <span class="btn-label" data-i18n="action.pause">暂停</span>
+          </button>
+        </div>
+      </header>
+
+      <section class="workspace-toolbar" aria-label="统计范围">
+        <div class="workspace-toolbar-copy">
+          <span class="workspace-toolbar-kicker" data-i18n="filter.kicker">统计范围</span>
+          <strong id="reportPeriodLabel">全部时间</strong>
+        </div>
+        <div class="workspace-toolbar-controls">
+          <div id="reportRangeTabs" class="segmented" aria-label="统计范围"></div>
+          <div id="customRangeFields" class="custom-range-fields" hidden>
+            <label>
+              <span data-i18n="filter.start">开始日期</span>
+              <input id="customStartInput" type="date">
+            </label>
+            <label>
+              <span data-i18n="filter.end">结束日期</span>
+              <input id="customEndInput" type="date">
+            </label>
+          </div>
+          <div class="toolbar-spacer"></div>
+          <button id="exportCsvButton" class="button" type="button">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 20h14"/></svg>
+            <span data-i18n="action.exportCsv">导出 CSV</span>
+          </button>
+          <button id="exportJsonButton" class="button" type="button">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3M10 8h4M12 8v8M9 13h6"/></svg>
+            <span data-i18n="action.exportJson">导出 JSON</span>
+          </button>
+        </div>
+      </section>
+
+      <main class="content">
+    <div id="errorBanner" class="error-banner" role="alert"></div>
+
+        <section class="page-view" data-page-view="overview">
+          <div class="scan-band">
+            <div class="scan-facts">
+              <span><span data-i18n="scan.last">最近扫描</span> <strong id="lastScan">—</strong></span>
+              <span><span data-i18n="scan.next">下次刷新</span> <strong id="nextScan">—</strong></span>
+              <span><span data-i18n="scan.duration">扫描耗时</span> <strong id="duration">—</strong></span>
+              <span><span data-i18n="scan.events">事件</span> <strong id="eventCount">—</strong></span>
+            </div>
+            <div id="progressTrack" class="progress-track"><span></span></div>
+          </div>
+
+          <div class="metric-grid">
+            <article class="metric-card cost">
+              <div class="metric-heading">
+                <span class="metric-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m7 6 5 6 5-6M12 12v7M8 14h8M8 17h8"/></svg>
+                </span>
+                <div class="metric-label">
+                  <span data-i18n="metric.cost">参考总费用</span>
+                  <span data-i18n="metric.costHint">实采金额与未采集部分的参考估算</span>
+                </div>
+              </div>
+              <div id="totalCostValue" class="metric-value">—</div>
+              <div id="totalCostSub" class="metric-sub">—</div>
+            </article>
+            <article class="metric-card input">
+              <div class="metric-heading">
+                <span class="metric-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 20h14"/></svg>
+                </span>
+                <div class="metric-label">
+                  <span data-i18n="metric.input">总输入令牌</span>
+                  <span data-i18n="metric.inputHint">普通输入与缓存输入</span>
+                </div>
+              </div>
+              <div id="totalInputValue" class="metric-value">—</div>
+              <div id="totalInputSub" class="metric-sub">—</div>
+            </article>
+            <article class="metric-card output">
+              <div class="metric-heading">
+                <span class="metric-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V9M7 14l5-5 5 5M5 4h14"/></svg>
+                </span>
+                <div class="metric-label">
+                  <span data-i18n="metric.output">总输出令牌</span>
+                  <span data-i18n="metric.outputHint">模型生成的输出</span>
+                </div>
+              </div>
+              <div id="totalOutputValue" class="metric-value">—</div>
+              <div id="totalOutputSub" class="metric-sub">—</div>
+            </article>
+            <article class="metric-card cached">
+              <div class="metric-heading">
+                <span class="metric-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3 1.4 0 2.7-.1 3.8-.4"/></svg>
+                </span>
+                <div class="metric-label">
+                  <span data-i18n="metric.cached">缓存命中令牌</span>
+                  <span data-i18n="metric.cachedHint">从缓存直接读取的输入</span>
+                </div>
+              </div>
+              <div id="totalCachedValue" class="metric-value">—</div>
+              <div id="totalCachedSub" class="metric-sub">—</div>
+            </article>
+          </div>
+
+          <section id="comparisonBand" class="comparison-band" hidden>
+            <div class="comparison-heading">
+              <span data-i18n="comparison.title">较上一周期</span>
+              <strong id="comparisonPeriod">—</strong>
+            </div>
+            <div id="comparisonItems" class="comparison-items"></div>
+          </section>
+
+          <section class="panel chart-panel">
+            <div class="panel-head chart-panel-head">
+              <div class="panel-title">
+                <h2 id="chartPanelTitle">用量统计</h2>
+                <p id="chartPanelDescription">在同一位置切换图形类型和统计对象</p>
+              </div>
+            </div>
+            <div class="chart-toolbar">
+              <div class="toolbar-group">
+                <span class="toolbar-label" data-i18n="chart.type">图形类型</span>
+                <div id="chartTypeTabs" class="segmented" aria-label="图形类型"></div>
+              </div>
+              <div id="chartMetricGroup" class="toolbar-group">
+                <span class="toolbar-label" data-i18n="chart.subject">统计对象</span>
+                <div id="chartMetricTabs" class="segmented" aria-label="统计对象"></div>
+              </div>
+            </div>
+            <div id="chartSummary" class="chart-summary"></div>
+            <div class="chart-stage">
+              <div id="chartScroll" class="chart-scroll">
+                <svg id="usageChart" viewBox="0 0 1000 360" role="img" aria-label="用量统计图"></svg>
+              </div>
+              <div id="chartEmpty" class="chart-empty" hidden>暂时没有可用于画图的数据</div>
+            </div>
+            <div id="heatmapLegend" class="heatmap-legend" hidden>
+              <span data-i18n="heatmap.less">少</span>
+              <i class="level-0"></i><i class="level-1"></i><i class="level-2"></i><i class="level-3"></i><i class="level-4"></i>
+              <span data-i18n="heatmap.more">多</span>
+            </div>
+          </section>
+
+          <section class="panel compact-panel">
+            <div class="panel-head">
+              <div class="panel-title">
+                <h2 data-i18n="overview.quickTitle">快速明细</h2>
+                <p data-i18n="overview.quickDesc">总览只保留关键内容，完整分项可在“用量明细”中查看</p>
+              </div>
+              <button id="openUsageButton" class="button" type="button">
+                <span data-i18n="overview.openUsage">查看完整明细</span>
+              </button>
+            </div>
+            <div id="overviewTopList" class="top-list"></div>
+          </section>
+        </section>
+
+        <section class="page-view" data-page-view="usage" hidden>
+          <section class="panel">
+            <div class="panel-head">
+              <div class="panel-title">
+                <h2 data-i18n="usage.title">用量明细</h2>
+                <p data-i18n="usage.desc">按智能体工具、模型或其他维度查看令牌与费用</p>
+              </div>
+              <label class="search">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                <input id="searchInput" type="search" placeholder="筛选当前明细" data-i18n-placeholder="usage.search" autocomplete="off">
+              </label>
+            </div>
+            <div class="detail-toolbar">
+              <div class="toolbar-group">
+                <span class="toolbar-label" data-i18n="usage.dimension">统计维度</span>
+                <div id="dimensionTabs" class="segmented scrollable" aria-label="统计维度"></div>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th data-i18n="table.name">名称</th>
+                    <th class="num" data-i18n="table.totalTokens">总令牌</th>
+                    <th class="num" data-i18n="table.input">输入</th>
+                    <th class="num" data-i18n="table.output">输出</th>
+                    <th class="num" data-i18n="table.cached">缓存命中</th>
+                    <th class="num" data-i18n="table.cnyCost">人民币费用</th>
+                    <th class="num" data-i18n="table.usdCost">美元费用</th>
+                    <th data-i18n="table.costState">费用状态</th>
+                    <th class="num" data-i18n="table.share">占比</th>
+                    <th class="num" data-i18n="table.events">记录数</th>
+                  </tr>
+                </thead>
+                <tbody id="reportBody"></tbody>
+              </table>
+              <div id="reportEmpty" class="empty" hidden>没有匹配的数据</div>
+            </div>
+          </section>
+        </section>
+
+        <section class="page-view" data-page-view="sources" hidden>
+          <section class="panel">
+            <div class="panel-head">
+              <div class="panel-title">
+                <h2 data-i18n="sources.title">本机检测概览</h2>
+                <p data-i18n="sources.desc">每次启动和手动刷新都会重新检测当前电脑</p>
+              </div>
+              <button id="sourceRefreshButton" class="button primary" type="button">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 5v4h4"/><path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 19v-4h-4"/></svg>
+                <span data-i18n="sources.redetect">重新检测</span>
+              </button>
+            </div>
+            <div id="sourceSummaryGrid" class="detection-grid"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head">
+              <div class="panel-title">
+                <h2 data-i18n="sources.detailTitle">来源明细</h2>
+                <p data-i18n="sources.detailDesc">明确列出已发现、本机未发现和无法可靠采集的来源</p>
+              </div>
+            </div>
+            <div id="sourceList" class="source-list"></div>
+          </section>
+        </section>
+
+        <section class="page-view" data-page-view="quality" hidden>
+          <section class="panel">
+            <div class="panel-head">
+              <div class="panel-title">
+                <h2 data-i18n="quality.validationTitle">校验结果</h2>
+                <p data-i18n="quality.validationDesc">汇总前会检查数据含义、重复键和总量一致性</p>
+              </div>
+            </div>
+            <div id="validationGrid" class="validation-grid"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head">
+              <div class="panel-title">
+                <h2 data-i18n="quality.issuesTitle">扫描问题</h2>
+                <p data-i18n="quality.issuesDesc">错误和警告会影响统计可信度，提示项用于说明覆盖情况</p>
+              </div>
+            </div>
+            <div id="issueList" class="issue-list"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head">
+              <div class="panel-title">
+                <h2 data-i18n="quality.notesTitle">统计说明</h2>
+                <p data-i18n="quality.notesDesc">口径说明直接来自当前扫描结果</p>
+              </div>
+            </div>
+            <div id="notes" class="notes"></div>
+          </section>
+        </section>
+
+        <section class="page-view" data-page-view="settings" hidden>
+          <section class="panel settings-panel">
+            <div class="panel-head">
+              <div class="panel-title">
+                <h2 data-i18n="settings.displayTitle">显示与语言</h2>
+                <p data-i18n="settings.displayDesc">设置会自动保存到当前电脑并立即生效</p>
+              </div>
+              <span id="settingsSaved" class="save-state" data-i18n="settings.saved">已保存</span>
+            </div>
+            <form id="settingsForm" class="settings-form">
+              <label class="setting-field">
+                <span data-i18n="settings.language">界面语言</span>
+                <select id="languageSelect" name="language">
+                  <option value="zh-CN">中文</option>
+                  <option value="en-US">英语</option>
+                </select>
+                <small data-i18n="settings.languageHint">默认中文，切换后整个应用界面立即更新</small>
+              </label>
+              <label class="setting-field">
+                <span data-i18n="settings.theme">界面主题</span>
+                <select id="themeSelect" name="theme">
+                  <option value="light" data-i18n="settings.themeLight">浅色</option>
+                  <option value="dark" data-i18n="settings.themeDark">深色</option>
+                  <option value="system" data-i18n="settings.themeSystem">跟随系统</option>
+                </select>
+                <small data-i18n="settings.themeHint">深色主题适合夜间查看长期统计</small>
+              </label>
+              <label class="setting-field">
+                <span data-i18n="settings.currency">默认币种</span>
+                <select id="currencySelect" name="currency">
+                  <option value="CNY" data-i18n="settings.currencyCNY">人民币（元）</option>
+                  <option value="USD" data-i18n="settings.currencyUSD">美元（$）</option>
+                </select>
+                <small data-i18n="settings.currencyHint">主显币种，另一币种仍会在明细中显示</small>
+              </label>
+              <label class="setting-field">
+                <span data-i18n="settings.rate">美元兑人民币汇率</span>
+                <div class="input-affix">
+                  <span data-i18n="settings.rateFrom">1 美元 =</span>
+                  <input id="exchangeRateInput" name="exchange_rate" type="number" min="0.01" max="100" step="0.01" inputmode="decimal">
+                  <span data-i18n="settings.rateTo">人民币</span>
+                </div>
+                <small data-i18n="settings.rateHint">不联网获取汇率，由用户自行修改；默认 7.20</small>
+              </label>
+              <label class="setting-field">
+                <span data-i18n="settings.refresh">自动刷新间隔</span>
+                <select id="refreshSelect" name="refresh_seconds">
+                  <option value="10" data-i18n="settings.seconds10">每 10 秒</option>
+                  <option value="30" data-i18n="settings.seconds30">每 30 秒</option>
+                  <option value="60" data-i18n="settings.seconds60">每 1 分钟</option>
+                  <option value="300" data-i18n="settings.seconds300">每 5 分钟</option>
+                  <option value="900" data-i18n="settings.seconds900">每 15 分钟</option>
+                </select>
+                <small data-i18n="settings.refreshHint">最小 10 秒，修改后后台扫描周期同步更新</small>
+              </label>
+              <div class="settings-actions">
+                <button id="resetSettingsButton" class="button" type="button">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v6h6"/></svg>
+                  <span data-i18n="settings.reset">恢复默认设置</span>
+                </button>
+              </div>
+            </form>
+          </section>
+
+          <div class="settings-columns">
+            <section class="panel settings-panel">
+              <div class="panel-head">
+                <div class="panel-title">
+                  <h2 data-i18n="settings.aboutTitle">应用信息</h2>
+                  <p data-i18n="settings.aboutDesc">版本、运行方式和数据位置</p>
+                </div>
+              </div>
+              <div class="about-product">
+                <div class="about-emblem" aria-hidden="true">
+                  <svg viewBox="0 0 64 64" fill="none">
+                    <defs>
+                      <linearGradient id="aboutTile" x1="10" y1="6" x2="54" y2="58" gradientUnits="userSpaceOnUse">
+                        <stop offset="0" stop-color="#1eb09e"/>
+                        <stop offset="1" stop-color="#0b5854"/>
+                      </linearGradient>
+                    </defs>
+                    <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#aboutTile)"/>
+                    <rect x="16" y="16" width="32" height="32" rx="9" fill="#f8fdfc" stroke="#cee9e4" stroke-width="0.9"/>
+                    <rect x="20.5" y="36" width="5.6" height="8" rx="2.4" fill="#14a08f"/>
+                    <rect x="29.2" y="30" width="5.6" height="14" rx="2.4" fill="#0f766e"/>
+                    <rect x="37.9" y="23.5" width="5.6" height="20.5" rx="2.4" fill="#f59e0b"/>
+                    <rect x="19" y="45.4" width="26" height="1.5" rx="0.75" fill="#d6eee9"/>
+                    <circle cx="48" cy="48" r="9.4" fill="#ffffff"/>
+                    <circle cx="48" cy="48" r="7.2" fill="#f59e0b"/>
+                    <circle cx="48" cy="48" r="2.7" fill="#ffffff"/>
+                  </svg>
+                </div>
+                <div class="about-product-copy">
+                  <strong data-i18n="app.name">智能体用量账本</strong>
+                  <span data-i18n="app.localOnly">本机只读统计</span>
+                </div>
+                <div class="about-version">
+                  <span data-i18n="settings.version">软件版本</span>
+                  <strong id="aboutVersion">—</strong>
+                </div>
+              </div>
+              <dl class="about-facts">
+                <div class="about-fact">
+                  <dt data-i18n="settings.windowMode">运行方式</dt>
+                  <dd id="aboutWindowMode">—</dd>
+                </div>
+                <div class="about-fact">
+                  <dt data-i18n="settings.status">服务状态</dt>
+                  <dd><span id="aboutStatus" class="about-status">—</span></dd>
+                </div>
+                <div class="about-fact">
+                  <dt data-i18n="settings.license">许可证</dt>
+                  <dd><span class="license-state">MIT</span></dd>
+                </div>
+              </dl>
+              <div class="about-location">
+                <span class="about-location-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z"/><path d="M3 10h18"/></svg>
+                </span>
+                <div class="about-location-copy">
+                  <span class="about-location-label" data-i18n="settings.dataDir">数据位置</span>
+                  <span id="aboutDataDir" class="about-location-value">—</span>
+                </div>
+              </div>
+            </section>
+            <section class="panel settings-panel">
+              <div class="panel-head">
+                <div class="panel-title">
+                  <h2 data-i18n="settings.runtimeTitle">运行控制</h2>
+                  <p data-i18n="settings.runtimeDesc">这些操作不会关闭其他智能体工具</p>
+                </div>
+              </div>
+              <div class="startup-setting">
+                <span class="startup-setting-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v9"/><path d="M6.6 5.8a8 8 0 1 0 10.8 0"/></svg>
+                </span>
+                <div class="startup-setting-copy">
+                  <strong data-i18n="settings.startupTitle">开机自动启动</strong>
+                  <small data-i18n="settings.startupDesc">登录 Windows 后自动打开本机账本，可随时关闭。</small>
+                </div>
+                <label class="switch-control">
+                  <input id="startupToggle" type="checkbox" role="switch" data-i18n-aria-label="settings.startupTitle">
+                  <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+                  <span id="startupStateText" class="switch-state">已关闭</span>
+                </label>
+              </div>
+              <div class="runtime-actions">
+                <button id="settingsRefreshButton" class="button primary" type="button">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 5v4h4"/><path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 19v-4h-4"/></svg>
+                  <span data-i18n="settings.scanNow">立即重新扫描</span>
+                </button>
+                <button id="settingsPauseButton" class="button" type="button">
+                  <svg class="icon pause-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path class="pause-glyph" d="M8 5v14M16 5v14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+                    <path class="resume-glyph" d="M8.2 5.2 19 12 8.2 18.8z" fill="currentColor"/>
+                  </svg>
+                  <span id="settingsPauseTitle" data-i18n="settings.pauseAuto">暂停自动刷新</span>
+                </button>
+                <button id="openDataButton" class="button" type="button">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z"/><path d="M3 10h18"/></svg>
+                  <span data-i18n="settings.openData">打开数据目录</span>
+                </button>
+                <button id="copyDiagnosticsButton" class="button" type="button">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>
+                  <span data-i18n="settings.copyDiagnostics">复制诊断信息</span>
+                </button>
+                <button id="clearCacheButton" class="button danger" type="button">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/><path d="M10 10v6M14 10v6"/></svg>
+                  <span data-i18n="settings.clearCache">清除临时缓存</span>
+                </button>
+                <button id="settingsStopButton" class="button danger" type="button" data-i18n-title="action.stopTitle" data-i18n-aria-label="action.stopTitle">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v9"/><path d="M7.1 5.8a8 8 0 1 0 9.8 0"/></svg>
+                  <span data-i18n="settings.stopService">停止本机服务</span>
+                </button>
+              </div>
+              <div class="runtime-safety">
+                <div class="runtime-safety-item">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6.5v5.2c0 4.8 3.3 8.1 8 9.3 4.7-1.2 8-4.5 8-9.3V6.5z"/><path d="M9 12.2 11 14l4-4"/></svg>
+                  <span data-i18n="settings.runtimeLocal">仅监听本机回环地址</span>
+                </div>
+                <div class="runtime-safety-item">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18.5H6a4 4 0 0 1-.7-7.9A6.5 6.5 0 0 1 18 9.5a4.5 4.5 0 0 1 .5 9H17"/><path d="m9 15 3 3 3-3M12 11v7"/></svg>
+                  <span data-i18n="settings.runtimeNoUpload">只读取本机日志，不上传数据</span>
+                </div>
+                <div class="runtime-safety-item">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3"/><path d="M5.5 20c.6-3.6 3-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/></svg>
+                  <span data-i18n="settings.runtimeNoLogin">无需登录账号</span>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <section class="panel settings-panel price-panel">
+            <div class="panel-head">
+              <div class="panel-title">
+                <h2 data-i18n="settings.priceTitle">模型价格表</h2>
+                <p data-i18n="settings.priceDesc">价格为美元/百万令牌；修改后自动保存并重新估算费用</p>
+              </div>
+              <button id="resetPricesButton" class="button" type="button">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v6h6"/></svg>
+                <span data-i18n="settings.priceReset">恢复默认价格</span>
+              </button>
+            </div>
+            <div class="price-table-wrap">
+              <table class="price-table">
+                <thead>
+                  <tr>
+                    <th data-i18n="settings.priceModel">模型</th>
+                    <th data-i18n="settings.priceInput">输入价格</th>
+                    <th data-i18n="settings.priceCached">缓存命中价格</th>
+                    <th data-i18n="settings.priceOutput">输出价格</th>
+                  </tr>
+                </thead>
+                <tbody id="priceTableBody"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+      </main>
+
+      <footer class="workspace-footer" data-i18n="footer.note">关闭应用窗口会同时停止后台服务。</footer>
+    </div>
+  </div>
+
+  <div id="stoppedOverlay" class="stopped-overlay">
+    <div class="stopped-dialog">
+      <h2 data-i18n="stopped.title">服务已停止</h2>
+      <p data-i18n="stopped.desc">可以关闭此窗口。再次双击 AgentTokenLedger.exe 即可重新启动。</p>
+    </div>
+  </div>
+  <div id="chartTooltip" class="chart-tooltip"></div>
+
+  <script src="/assets/app.js"></script>
+  <script src="/assets/runtime.js"></script>
+</body>
+</html>

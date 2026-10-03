@@ -1,0 +1,50 @@
+name: 缺陷报告
+description: 报告来源检测、统计或桌面程序问题
+title: "[缺陷] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请不要粘贴 API Key、Cookie、完整会话正文或未经脱敏的本机数据库。
+  - type: input
+    id: system
+    attributes:
+      label: 系统环境
+      description: Windows 版本、Python 版本和程序版本
+    validations:
+      required: true
+  - type: input
+    id: agent
+    attributes:
+      label: 相关智能体工具
+      description: 工具名称、版本和来源状态
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 从启动程序到出现问题的完整步骤
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期结果
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 脱敏证据
+      description: 可以粘贴日志片段、截图或报告摘要，但必须先去掉私密信息。
+    validations:
+      required: false
