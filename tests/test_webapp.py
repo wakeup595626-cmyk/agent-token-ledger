@@ -77,7 +77,7 @@ class WebappTests(unittest.TestCase):
 
             fallback = service.update_preferences(
                 {
-                    "language": "fr-FR",
+                    "language": "xx-XX",
                     "currency": "EUR",
                     "exchange_rate": 500,
                     "refresh_seconds": 5,
@@ -107,6 +107,11 @@ class WebappTests(unittest.TestCase):
             self.assertEqual(service.refresh_seconds, 60)
             self.assertEqual(service.snapshot()["preferences"], saved)
             self.assertTrue((Path(temp) / "settings.json").is_file())
+
+            for code in ("zh-TW", "ja-JP", "ko-KR", "de-DE", "fr-FR", "es-ES"):
+                updated = service.update_preferences({"language": code})
+                self.assertEqual(updated["language"], code)
+            self.assertEqual(service.snapshot()["preferences"]["language"], "es-ES")
 
     def test_preferences_fall_back_when_windows_replace_is_unavailable(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

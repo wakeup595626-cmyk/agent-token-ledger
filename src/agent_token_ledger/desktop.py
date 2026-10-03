@@ -70,12 +70,14 @@ def _webview_session(url: str, data_dir: Path) -> WindowSession:
             logging.debug("WebView 窗口已经关闭", exc_info=True)
 
     def run() -> None:
-        webview.start(
-            gui="edgechromium",
-            debug=False,
-            private_mode=True,
-            storage_path=str(storage_path.resolve()),
-        )
+        kwargs = {
+            "debug": False,
+            "private_mode": True,
+            "storage_path": str(storage_path.resolve()),
+        }
+        if sys.platform == "win32":
+            kwargs["gui"] = "edgechromium"
+        webview.start(**kwargs)
 
     return WindowSession("webview", run, close)
 

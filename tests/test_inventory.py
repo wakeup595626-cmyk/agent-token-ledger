@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -96,6 +97,46 @@ class InventoryTests(unittest.TestCase):
             self.assertEqual(context.home, home)
             self.assertEqual(context.appdata, appdata)
             self.assertEqual(context.local_appdata, local_appdata)
+
+    def test_default_context_uses_xdg_paths_on_linux(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            home = root / "home" / "someone"
+            with patch.object(sys, "platform", "linux"), patch.dict(
+                os.environ,
+                {},
+            ):
+                os.environ.pop("USERPROFILE", None)
+                os.environ.pop("APPDATA", None)
+                os.environ.pop("LOCALAPPDATA", None)
+                with patch("pathlib.Path.home", return_value=home):
+                    context = default_context(root / "work")
+
+            self.assertEqual(context.home, home)
+            self.assertEqual(context.appdata, home / ".config")
+            self.assertEqual(context.local_appdata, home / ".local" / "share")
+
+    def test_default_context_uses_library_paths_on_macos(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            home = root / "Users" / "someone"
+            with patch.object(sys, "platform", "darwin"), patch.dict(
+                os.environ,
+                {},
+            ):
+                os.environ.pop("USERPROFILE", None)
+                os.environ.pop("APPDATA", None)
+                os.environ.pop("LOCALAPPDATA", None)
+                with patch("pathlib.Path.home", return_value=home):
+                    context = default_context(root / "work")
+
+            self.assertEqual(context.home, home)
+            self.assertEqual(
+                context.appdata, home / "Library" / "Application Support"
+            )
+            self.assertEqual(
+                context.local_appdata, home / "Library" / "Application Support"
+            )
 
 
 def _context(root: Path) -> ScanContext:

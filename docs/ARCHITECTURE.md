@@ -36,6 +36,18 @@ AgentTokenLedger.exe
 | `delivery.py` | 导出完整报告和 SHA-256 清单 |
 | `web/` | 全中文应用界面，无外部 CDN 依赖 |
 
+## 平台与数据目录
+
+- Windows（当前发布与实测平台）：数据目录为 `%LOCALAPPDATA%\AgentTokenLedger`；扫描上下文解析 `%USERPROFILE%`、`%APPDATA%`、`%LOCALAPPDATA%`；窗口优先使用 Edge WebView2（`edgechromium`）。
+- Linux（兼容启动，未实测）：数据目录为 `~/.local/share/AgentTokenLedger`；`appdata` 解析为 `~/.config`，`local_appdata` 解析为 `~/.local/share`；窗口使用系统默认 WebView 后端。
+- macOS（兼容启动，未实测）：数据目录为 `~/Library/Application Support/AgentTokenLedger`；`appdata` 与 `local_appdata` 均解析为 `~/Library/Application Support`；窗口使用系统默认 WebView 后端。
+
+开机自启仅由软件内开关写入 Windows 当前用户启动项实现，默认关闭；非 Windows 平台不提供该能力并在设置中显示不可用。
+
+## 界面语言
+
+界面翻译目录内置在 `web/app.js`，当前提供八种语言：zh-CN、zh-TW、en-US、ja-JP、ko-KR、de-DE、fr-FR、es-ES。`preferences.py` 的 `SUPPORTED_LANGUAGES` 与之对应，非法语言码回退为 zh-CN。`runtime.js` 根据当前语言本地化金额、数字与星期标签。
+
 ## 统计口径
 
 界面重点展示三项：

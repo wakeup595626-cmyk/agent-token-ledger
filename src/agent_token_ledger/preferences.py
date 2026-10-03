@@ -17,7 +17,16 @@ DEFAULT_PREFERENCES: dict[str, Any] = {
     "model_prices": {name: dict(price) for name, price in DEFAULT_MODEL_PRICES.items()},
 }
 
-SUPPORTED_LANGUAGES = {"zh-CN", "en-US"}
+SUPPORTED_LANGUAGES = {
+    "zh-CN",
+    "zh-TW",
+    "en-US",
+    "ja-JP",
+    "ko-KR",
+    "de-DE",
+    "fr-FR",
+    "es-ES",
+}
 SUPPORTED_CURRENCIES = {"CNY", "USD"}
 SUPPORTED_THEMES = {"light", "dark", "system"}
 

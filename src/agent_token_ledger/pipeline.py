@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -20,10 +21,17 @@ from .storage import LedgerDatabase
 
 def default_context(work_dir: Path) -> ScanContext:
     user_home = Path(os.environ.get("USERPROFILE") or Path.home())
-    appdata = Path(os.environ.get("APPDATA") or user_home / "AppData" / "Roaming")
-    local_appdata = Path(
-        os.environ.get("LOCALAPPDATA") or user_home / "AppData" / "Local"
-    )
+    if sys.platform == "win32":
+        appdata = Path(os.environ.get("APPDATA") or user_home / "AppData" / "Roaming")
+        local_appdata = Path(
+            os.environ.get("LOCALAPPDATA") or user_home / "AppData" / "Local"
+        )
+    elif sys.platform == "darwin":
+        appdata = Path(os.environ.get("APPDATA") or user_home / "Library" / "Application Support")
+        local_appdata = Path(os.environ.get("LOCALAPPDATA") or user_home / "Library" / "Application Support")
+    else:
+        appdata = Path(os.environ.get("APPDATA") or user_home / ".config")
+        local_appdata = Path(os.environ.get("LOCALAPPDATA") or user_home / ".local" / "share")
     return ScanContext(
         home=user_home,
         appdata=appdata,

@@ -92,6 +92,10 @@ def _default_data_dir() -> Path:
     local_appdata = os.environ.get("LOCALAPPDATA")
     if local_appdata:
         return Path(local_appdata) / "AgentTokenLedger"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "AgentTokenLedger"
+    if sys.platform != "win32":
+        return Path.home() / ".local" / "share" / "AgentTokenLedger"
     return Path.home() / ".agent-token-ledger"
 
 

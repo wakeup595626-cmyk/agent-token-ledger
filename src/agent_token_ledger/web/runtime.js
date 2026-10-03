@@ -47,6 +47,7 @@
     ...(state?.preferences || {}),
   });
   const locale = () => preferences().language || "zh-CN";
+  const localeGroup = () => (locale().startsWith("zh") ? "zh" : "western");
   const t = (key, values = {}) => {
     const activeLocale = locale();
     const template =
@@ -83,7 +84,7 @@
     });
   const tokenValue = (value) => {
     const numeric = number(value);
-    if (locale().startsWith("en")) {
+    if (localeGroup() === "western") {
       if (Math.abs(numeric) >= 1_000_000_000) {
         return `${fixed(numeric / 1_000_000_000, numeric >= 10_000_000_000 ? 1 : 2)} B`;
       }
@@ -106,9 +107,20 @@
   const compactNumber = (value) => tokenValue(value);
   const money = (usd, currency = preferences().currency) => {
     const value = number(usd);
-    if (currency === "USD") return `$${fixed(value, value < 1 ? 4 : 2)}`;
     const rate = number(preferences().exchange_rate) || 7.2;
-    return `¥${fixed(value * rate, value * rate < 100 ? 2 : 2)}`;
+    const amount = currency === "USD" ? value : value * rate;
+    const digits = currency === "USD" && value < 1 ? 4 : 2;
+    try {
+      return amount.toLocaleString(locale(), {
+        style: "currency",
+        currency,
+        minimumFractionDigits: digits,
+        maximumFractionDigits: digits,
+      });
+    } catch (error) {
+      const sign = currency === "USD" ? "$" : "¥";
+      return `${sign}${fixed(amount, digits)}`;
+    }
   };
   const fullTime = (value) => {
     if (!value) return "—";
@@ -836,9 +848,9 @@
     const startY = 16;
     const maximum = Math.max(...points.map((item) => item.value), 1);
     const byKey = new Map(points.map((item) => [item.key, item]));
-    const weekdays = locale().startsWith("en")
-      ? ["M", "T", "W", "T", "F", "S", "S"]
-      : ["一", "二", "三", "四", "五", "六", "日"];
+    const weekdays = [2, 3, 4, 5, 6, 7, 1].map((day) =>
+      new Date(2024, 0, day).toLocaleDateString(locale(), { weekday: "narrow" }),
+    );
     weekdays.forEach((label, index) => {
       if (index % 2 !== 0) return;
       const textNode = make("text", {
