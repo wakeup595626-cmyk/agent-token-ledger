@@ -4,6 +4,8 @@
 
 ## 未发布
 
+## 1.1.0 - 2026-10-03
+
 - 界面语言从中文简体、英文扩展到八种主流语言：简体中文、繁體中文、English、日本語、한국어、Deutsch、Français、Español；设置中可切换并即时生效，金额、数字与星期标签跟随所选语言本地化。
 - 数据目录与扫描路径在 Windows 之外增加 Linux（XDG：`~/.config`、`~/.local/share`）与 macOS（`~/Library/Application Support`）的兼容解析，非 Windows 窗口使用系统默认 WebView 后端；开机自启等 Windows 专属能力在非 Windows 平台自动显示不可用。Linux 与 macOS 目前为兼容启动，尚未在真实 Linux/macOS 机器上实测。
 - 修复点击“暂停”后界面状态不即时更新的问题，暂停期间明确显示“已暂停”和“继续”。
