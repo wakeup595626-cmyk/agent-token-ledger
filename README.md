@@ -1,5 +1,7 @@
 # 本机智能体 Token 用量账本
 
+**中文** | [English](README.en.md)
+
 [![CI](https://github.com/wakeup595626-cmyk/agent-token-ledger/actions/workflows/ci.yml/badge.svg)](https://github.com/wakeup595626-cmyk/agent-token-ledger/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/wakeup595626-cmyk/agent-token-ledger)](https://github.com/wakeup595626-cmyk/agent-token-ledger/releases)
 
