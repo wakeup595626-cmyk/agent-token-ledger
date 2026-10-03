@@ -1696,11 +1696,30 @@
     systemThemeQuery?.addEventListener?.("change", () => {
       if (preferences().theme === "system") render();
     });
+    verifyLanguageOptions();
     bindEvents();
     bindChartTooltip();
     render();
     loadState(true);
     window.setInterval(() => loadState(false), 2000);
+  }
+
+  // 启动自检：语言下拉框的选项必须与翻译目录覆盖的语言完全一致。
+  // 上次“下拉框为空”就是 HTML 选项与目录脱节导致的，这里做一次前端兜底。
+  function verifyLanguageOptions() {
+    const select = byId("languageSelect");
+    if (!select) return;
+    const expected = Object.keys(translations).sort();
+    const actual = [...select.options].map((option) => option.value).sort();
+    const missing = expected.filter((value) => !actual.includes(value));
+    const extra = actual.filter((value) => !expected.includes(value));
+    if (missing.length || extra.length) {
+      console.warn(
+        "语言下拉框与翻译目录不一致：",
+        missing.length ? `缺少 ${missing.join(",")}` : "",
+        extra.length ? `多余 ${extra.join(",")}` : ""
+      );
+    }
   }
 
   initialize();

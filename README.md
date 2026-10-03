@@ -179,6 +179,8 @@
 
 ## 从源码运行
 
+> 以下「从源码运行」「一键扫描与生成报告」「构建」小节面向开发者；普通使用者直接双击桌面上的 `AgentTokenLedger.exe` 即可，无需执行任何命令。
+
 需要 Python 3.11 或更高版本。
 
 ```powershell
@@ -197,6 +199,8 @@ python -m agent_token_ledger --no-browser
 默认地址为 `http://127.0.0.1:8765/`。如果首选端口被占用，程序会在后续端口中寻找可用端口。
 
 ## 一键扫描与生成报告
+
+这是面向开发者的命令行流程（`scripts\run-all.ps1` 调用 `agent_token_ledger` 的 `scan` / `validate` / `export` 子命令），不使用桌面窗口，扫描结果写入项目内的开发数据库 `var\ledger.sqlite`，与桌面程序互不影响。
 
 在项目根目录运行：
 

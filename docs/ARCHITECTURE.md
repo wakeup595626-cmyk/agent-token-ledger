@@ -48,6 +48,12 @@ AgentTokenLedger.exe
 
 界面翻译目录内置在 `web/app.js`，该文件只承载翻译目录；应用运行时统一由 `web/runtime.js` 提供。当前提供八种语言：zh-CN、zh-TW、en-US、ja-JP、ko-KR、de-DE、fr-FR、es-ES。`preferences.py` 的 `SUPPORTED_LANGUAGES` 与之对应，非法语言码回退为 zh-CN。设置页的“界面语言”下拉框在 `web/index.html` 内直接渲染这八种选项，`runtime.js` 负责保存选择、切换整页文案，并本地化金额、数字与星期标签。
 
+应用启动时会对“界面语言”下拉框做一次前端自检：比对下拉框选项与翻译目录覆盖的语言是否完全一致，缺失或多余时给出警告，避免再次出现选项与目录脱节导致下拉框为空。
+
+## 本地账本存储
+
+命令行流程（`scan` / `export` 等子命令）把扫描批次写入开发数据库 `var\ledger.sqlite`，与桌面程序的内存统计互不影响。`persist_scan` 落库成功后默认只保留最近 10 次完成的扫描批次，更早的整批历史（events、来源快照、问题记录，均带级联删除）会被清掉并 VACUUM 回收磁盘；始终至少保留最新一次完成的扫描。`keep_scans=0` 可关闭自动清理。
+
 ## 统计口径
 
 界面重点展示三项：

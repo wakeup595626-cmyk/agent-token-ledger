@@ -185,6 +185,7 @@ def persist_scan(
     context: ScanContext,
     command: dict,
     include_inventory: bool = True,
+    keep_scans: int | None = None,
 ) -> int:
     scan_id = database.begin_run(command)
     try:
@@ -209,6 +210,13 @@ def persist_scan(
         database.connection.rollback()
         database.finish_run(scan_id, "failed", f"{type(exc).__name__}: {exc}")
         raise
+    # 本次扫描落库成功后，清掉超出保留数量的历史批次，回收磁盘。
+    # keep_scans=0 表示关闭自动清理（供测试或特殊场景使用）。
+    effective_keep = (
+        database.DEFAULT_KEEP_SCANS if keep_scans is None else int(keep_scans)
+    )
+    if effective_keep > 0:
+        database.prune_old_scans(effective_keep)
     return scan_id
 
 

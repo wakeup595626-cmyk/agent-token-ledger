@@ -84,6 +84,10 @@ CREATE TABLE IF NOT EXISTS issues (
 
 
 class LedgerDatabase:
+    #: 本地账本只保留最近这么多次完成的扫描，更早的整批快照会被清掉，
+    #: 防止 ledger.sqlite 只增不减（开发库曾涨到数百 MB）。
+    DEFAULT_KEEP_SCANS = 10
+
     def __init__(self, path: str | Path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -251,6 +255,36 @@ class LedgerDatabase:
         if row is None:
             raise RuntimeError("No completed scan exists in the ledger")
         return int(row["scan_id"])
+
+    def scan_count(self) -> int:
+        row = self.connection.execute(
+            "SELECT COUNT(*) AS n FROM scan_runs"
+        ).fetchone()
+        return int(row["n"])
+
+    def prune_old_scans(self, keep: int | None = None) -> int:
+        """删除最近 keep 次之外的全部扫描批次，返回被删除的批次数。
+
+        events / source_snapshots / issues 都带 ON DELETE CASCADE，只需删
+        scan_runs 主表即可联动清理。删除后执行 VACUUM 真正回收磁盘空间。
+        始终至少保留最新一次完成的扫描，保证报表与导出可用。
+        """
+        keep = self.DEFAULT_KEEP_SCANS if keep is None else max(1, int(keep))
+        rows = self.connection.execute(
+            "SELECT scan_id FROM scan_runs ORDER BY scan_id DESC"
+        ).fetchall()
+        all_ids = [int(row["scan_id"]) for row in rows]
+        removable = all_ids[keep:]
+        if not removable:
+            return 0
+        placeholders = ", ".join("?" for _ in removable)
+        self.connection.execute(
+            f"DELETE FROM scan_runs WHERE scan_id IN ({placeholders})",
+            removable,
+        )
+        self.connection.commit()
+        self.connection.execute("VACUUM")
+        return len(removable)
 
     def scan_run(self, scan_id: int) -> dict[str, Any]:
         row = self.connection.execute(
