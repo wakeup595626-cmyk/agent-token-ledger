@@ -18,7 +18,7 @@ Supported sources include Codex, Codex Cockpit mirrors, Cockpit Gateway, DeepSee
 
 ## Getting started
 
-1. Download `AgentTokenLedger-windows-x64-v1.0.0.zip` from GitHub Releases.
+1. Download `AgentTokenLedger-windows-x64-v1.1.2.zip` from GitHub Releases (the newest version is always listed under [Releases](https://github.com/wakeup595626-cmyk/agent-token-ledger/releases)).
 2. Extract it to any writable directory.
 3. Double-click `AgentTokenLedger.exe`.
 
@@ -67,6 +67,12 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build-app.ps1
 - Generated reports contain local source paths and usage evidence. They are meant for local viewing and local delivery — do not upload them to public GitHub repositories.
 
 The full data-authenticity statement lives in `docs/DATA_AUTHENTICITY.md`; detailed usage and build instructions live in the [Chinese README](README.md).
+
+## Current version
+
+Version: `1.1.2` (the newest version is always listed under [Releases](https://github.com/wakeup595626-cmyk/agent-token-ledger/releases)).
+
+See `CHANGELOG.md` for release notes.
 
 ## Community and support
 

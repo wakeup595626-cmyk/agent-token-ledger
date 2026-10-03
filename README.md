@@ -34,7 +34,7 @@
 
 ### 安装和启动
 
-1. 从 GitHub Releases 下载 `AgentTokenLedger-windows-x64-v1.0.0.zip`。
+1. 从 GitHub Releases 下载 `AgentTokenLedger-windows-x64-v1.1.2.zip`（最新版本以 [Releases](https://github.com/wakeup595626-cmyk/agent-token-ledger/releases) 为准）。
 2. 将压缩包解压到任意可写目录，例如桌面上的独立文件夹。
 3. 双击 `AgentTokenLedger.exe`。
 4. 程序打开应用窗口后即可查看统计结果。
@@ -261,10 +261,10 @@ powershell -ExecutionPolicy Bypass -File .\scripts\package.ps1
 
 | 文件 | 用途 | 是否适合公开上传 |
 | --- | --- | --- |
-| `agent-token-ledger-v1.0.0-source.zip` | 公共源码、测试、脚本、文档和配置 | 是 |
-| `agent-token-ledger-v1.0.0-reports.zip` | 当前电脑生成的本地报告 | 否 |
-| `agent-token-ledger-v1.0.0-delivery.zip` | 源码、文档和本地报告的完整交付 | 否 |
-| `AgentTokenLedger-windows-x64-v1.0.0.zip` | Windows 可执行程序和发布文档 | 是 |
+| `agent-token-ledger-v1.1.2-source.zip` | 公共源码、测试、脚本、文档和配置 | 是 |
+| `agent-token-ledger-v1.1.2-reports.zip` | 当前电脑生成的本地报告 | 否 |
+| `agent-token-ledger-v1.1.2-delivery.zip` | 源码、文档和本地报告的完整交付 | 否 |
+| `AgentTokenLedger-windows-x64-v1.1.2.zip` | Windows 可执行程序和发布文档 | 是 |
 
 每个 ZIP 都会同时生成 `.sha256` 校验文件。
 
@@ -306,6 +306,6 @@ powershell -ExecutionPolicy Bypass -File .\scripts\package.ps1
 
 ## 当前版本
 
-版本：`1.0.0`
+版本：`1.1.2`（最新版本以 [Releases](https://github.com/wakeup595626-cmyk/agent-token-ledger/releases) 为准）
 
 更新内容见 `CHANGELOG.md`。

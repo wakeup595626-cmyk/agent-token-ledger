@@ -53,16 +53,17 @@ powershell -ExecutionPolicy Bypass -File .\scripts\package.ps1
 
 | 包 | 用途 | 是否适合 GitHub |
 | --- | --- | --- |
-| `agent-token-ledger-v1.0.0-source.zip` | 公共源码、文档、测试、脚本 | 是 |
-| `agent-token-ledger-v1.0.0-reports.zip` | 本机扫描报告 | 否 |
-| `agent-token-ledger-v1.0.0-delivery.zip` | 源码加本机报告 | 否 |
+| `agent-token-ledger-v<version>-source.zip` | 公共源码、文档、测试、脚本 | 是 |
+| `agent-token-ledger-v<version>-reports.zip` | 本机扫描报告 | 否 |
+| `agent-token-ledger-v<version>-delivery.zip` | 源码加本机报告 | 否 |
 
 ## GitHub 发布流程
 
-1. 确认 `CHANGELOG.md`、`pyproject.toml` 和 `src/agent_token_ledger/__init__.py` 版本一致。
+1. 确认 `CHANGELOG.md`、`pyproject.toml`、`src/agent_token_ledger/__init__.py` 与 `README.md` / `README.en.md` 中的版本号和产物文件名一致。
 2. 运行测试、报告生成、桌面构建和发布包生成。
 3. 只把源码目录和公共源码包提交或发布，不上传 `var`、`reports` 和本机交付包。
-4. 打标签，例如 `v1.0.0`。
-5. 在 GitHub Release 中附加 `AgentTokenLedger-windows-x64-v1.0.0.zip`、`agent-token-ledger-v1.0.0-source.zip` 和对应 SHA-256。
+4. 打标签：`v` + `pyproject.toml` 中的版本号（例如 `v1.1.2`）。
+5. 在 GitHub Release 中附加 `AgentTokenLedger-windows-x64-v<version>.zip`、`agent-token-ledger-v<version>-source.zip` 和对应 SHA-256。
+6. 同步 `README.md` / `README.en.md` 的下载文件名与「当前版本」号后再发布，避免文档版本停留在旧版本。
 
 仓库不包含自动推送脚本，也不会代替维护者登录 GitHub。
