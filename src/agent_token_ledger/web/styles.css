@@ -910,12 +910,14 @@
       padding: 16px;
     }
     .runtime-actions-hint {
-      margin: -8px 16px 0;
+      margin: 4px 16px 0;
       font-size: 11px;
       font-weight: 450;
       line-height: 1.45;
       color: var(--muted);
     }
+    .runtime-actions + .runtime-actions-hint { margin-top: -8px; }
+    .runtime-actions-hint:last-of-type { margin-bottom: 10px; }
     .startup-setting {
       display: grid;
       grid-template-columns: 32px minmax(0, 1fr) auto;

@@ -83,7 +83,7 @@ Codex 原始日志采用按文件解析缓存：每个 `.jsonl` 文件记录“�
 
 程序自身的运行日志按大小自动轮转（单文件约 1 MB、保留 2 份备份）；“设置 → 运行控制 → 清除历史缓存”会清除浏览器临时文件、当前运行日志与日志轮转备份，但保留解析缓存，避免下次刷新退化为全量重新解析。
 
-“设置 → 运行控制 → 导出备份”通过 GET /api/backup/export 返回一段 UTF-8 JSON（不含绝对来源路径），由浏览器下载为 agent-token-ledger-backup-YYYY-MM-DD.json；“导入备份”通过 POST /api/backup/import 提交该 JSON，服务按「来源 + 记录标识」去重后合入当前内存事件并重算报表与校验结果，不写文件、不动来源 SQLite。
+“设置 → 运行控制 → 导出完整备份”通过 GET /api/backup/export 返回一段 UTF-8 JSON（不含绝对来源路径），由浏览器下载为 agent-token-ledger-backup-YYYY-MM-DD.json；“导入完整备份”通过 POST /api/backup/import 提交该 JSON，服务按「来源 + 记录标识」去重后合入当前内存事件并重算报表与校验结果，不写文件、不动来源 SQLite。
 
 界面状态只携带三个口径（primary / native / visible）各自的整体汇总和口径说明，不再内嵌三口径乘六维度的完整报表矩阵；图形与明细所需的维度分组由界面按需请求 `/api/report`，一次扫描只为当前口径过滤一次事件，避免每轮刷新重复聚合十八份报表。
 

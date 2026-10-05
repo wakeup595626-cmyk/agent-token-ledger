@@ -275,6 +275,8 @@
     document.querySelectorAll("[data-page-view]").forEach((view) => {
       view.hidden = view.dataset.pageView !== currentPage;
     });
+    const toolbar = document.querySelector(".workspace-toolbar");
+    if (toolbar) toolbar.hidden = currentPage === "settings";
   }
 
   function renderStatus() {
