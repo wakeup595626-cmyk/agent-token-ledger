@@ -450,12 +450,38 @@ class LedgerService:
                 failures.append(
                     f"{name}：{type(exc).__name__}: {exc}"
                 )
+        # 运行日志：截断当前日志并删除轮转备份，避免日志只增不减。
+        log_names = ["agent-token-ledger.log"]
+        log_names.extend(
+            sorted(
+                path.name
+                for path in base.glob("agent-token-ledger.log.*")
+                if path.is_file()
+            )
+        )
+        for name in log_names:
+            target = (base / name).resolve()
+            if target.parent != base or not target.exists():
+                continue
+            try:
+                if name == "agent-token-ledger.log":
+                    # 日志句柄以追加模式打开，截断后下次写入从文件头开始，不会残留空字节。
+                    target.open("w", encoding="utf-8").close()
+                else:
+                    target.unlink()
+                removed.append(name)
+            except OSError as exc:
+                failures.append(f"{name}：{type(exc).__name__}: {exc}")
         if failures:
             raise OSError(
                 "部分缓存无法清除，请关闭正在使用该缓存的窗口后重试。"
                 + "；".join(failures)
             )
-        return {"removed": removed, "work_dir": str(base)}
+        return {
+            "removed": removed,
+            "work_dir": str(base),
+            "kept_parse_cache": True,
+        }
 
     def wait_for_idle(self, timeout: float = 10.0) -> bool:
         return self._idle_event.wait(timeout)

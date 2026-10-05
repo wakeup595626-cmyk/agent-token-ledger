@@ -85,6 +85,41 @@ class WebappTests(unittest.TestCase):
             self.assertEqual(state["source_summary"]["detected"], 1)
             self.assertEqual(state["version"], APP_VERSION)
 
+    def test_clear_app_cache_removes_browser_and_logs_keeps_parse_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            (base / "webview").mkdir()
+            (base / "edge-app-profile").mkdir()
+            (base / "agent-token-ledger.log").write_text("old log", encoding="utf-8")
+            (base / "agent-token-ledger.log.1").write_text(
+                "old rotated", encoding="utf-8"
+            )
+            (base / "codex_native_cache_v1.json").write_text("{}", encoding="utf-8")
+            (base / "settings.json").write_text("{}", encoding="utf-8")
+
+            service = LedgerService(
+                work_dir=base,
+                refresh_seconds=30,
+                scanner=lambda: _payload(),
+            )
+            result = service.clear_app_cache()
+
+            self.assertIn("webview", result["removed"])
+            self.assertIn("edge-app-profile", result["removed"])
+            self.assertIn("agent-token-ledger.log", result["removed"])
+            self.assertIn("agent-token-ledger.log.1", result["removed"])
+            self.assertTrue(result["kept_parse_cache"])
+            self.assertFalse((base / "webview").exists())
+            self.assertFalse((base / "edge-app-profile").exists())
+            self.assertTrue((base / "agent-token-ledger.log").exists())
+            self.assertEqual(
+                (base / "agent-token-ledger.log").read_text(encoding="utf-8"),
+                "",
+            )
+            self.assertFalse((base / "agent-token-ledger.log.1").exists())
+            self.assertTrue((base / "codex_native_cache_v1.json").exists())
+            self.assertTrue((base / "settings.json").exists())
+
     def test_preferences_are_validated_and_persisted(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             service = LedgerService(

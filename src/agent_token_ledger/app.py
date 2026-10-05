@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+from logging.handlers import RotatingFileHandler
 import os
 import sys
 from pathlib import Path
@@ -100,12 +101,24 @@ def _default_data_dir() -> Path:
 
 
 def _configure_logging(path: Path) -> None:
-    logging.basicConfig(
-        filename=str(path),
-        level=logging.INFO,
+    root = logging.getLogger()
+    if any(
+        isinstance(handler, logging.FileHandler)
+        and getattr(handler, "baseFilename", "") == str(path)
+        for handler in root.handlers
+    ):
+        return
+    handler = RotatingFileHandler(
+        str(path),
+        maxBytes=1_000_000,
+        backupCount=2,
         encoding="utf-8",
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
+    )
+    root.setLevel(logging.INFO)
+    root.addHandler(handler)
 
 
 def _show_error(message: str) -> None:

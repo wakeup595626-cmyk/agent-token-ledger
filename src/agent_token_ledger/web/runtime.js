@@ -1698,8 +1698,22 @@
     on("exportCsvButton", "click", () => exportReport("csv"));
     on("exportJsonButton", "click", () => exportReport("json"));
     on("openDataButton", "click", () => action("/api/data/open"));
-    on("clearCacheButton", "click", () => {
-      if (window.confirm(`${t("settings.clearCache")}？`)) action("/api/cache/clear");
+    on("clearCacheButton", "click", async () => {
+      if (!window.confirm(`${t("settings.clearCache")}？`)) return;
+      try {
+        const next = await post("/api/cache/clear");
+        state = next;
+        lastStateSignature = stateSignature(next);
+        render();
+        const result = next?.action_result || {};
+        if (result.ok) {
+          showNotice(t("settings.clearCacheDone"));
+        } else {
+          showNotice(result.message || t("settings.clearCacheFailed"), "error");
+        }
+      } catch (error) {
+        showNotice(t("settings.clearCacheFailed"), "error");
+      }
     });
     on("copyDiagnosticsButton", "click", copyDiagnostics);
     on("customStartInput", "change", (event) => {

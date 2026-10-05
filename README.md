@@ -34,7 +34,7 @@
 
 ### 安装和启动
 
-1. 从 GitHub Releases 下载 `AgentTokenLedger-windows-x64-v1.1.4.zip`（最新版本以 [Releases](https://github.com/wakeup595626-cmyk/agent-token-ledger/releases) 为准）。
+1. 从 GitHub Releases 下载 `AgentTokenLedger-windows-x64-v1.1.5.zip`（最新版本以 [Releases](https://github.com/wakeup595626-cmyk/agent-token-ledger/releases) 为准）。
 2. 将压缩包解压到任意可写目录，例如桌面上的独立文件夹。
 3. 双击 `AgentTokenLedger.exe`。
 4. 程序打开应用窗口后即可查看统计结果。
@@ -45,7 +45,7 @@
 %LOCALAPPDATA%\AgentTokenLedger
 ```
 
-这些运行数据与来源工具的原始日志分开保存。
+这些运行数据与来源工具的原始日志分开保存。运行日志会按大小自动轮转（约 1 MB 一份、保留两份备份），也可以在“设置 → 运行控制 → 清除历史缓存”里连同浏览器临时文件一并清掉；解析缓存会保留，因为它是加快每次刷新速度的关键。
 
 ### 关闭和停止
 
@@ -261,10 +261,10 @@ powershell -ExecutionPolicy Bypass -File .\scripts\package.ps1
 
 | 文件 | 用途 | 是否适合公开上传 |
 | --- | --- | --- |
-| `agent-token-ledger-v1.1.4-source.zip` | 公共源码、测试、脚本、文档和配置 | 是 |
-| `agent-token-ledger-v1.1.4-reports.zip` | 当前电脑生成的本地报告 | 否 |
-| `agent-token-ledger-v1.1.4-delivery.zip` | 源码、文档和本地报告的完整交付 | 否 |
-| `AgentTokenLedger-windows-x64-v1.1.4.zip` | Windows 可执行程序和发布文档 | 是 |
+| `agent-token-ledger-v1.1.5-source.zip` | 公共源码、测试、脚本、文档和配置 | 是 |
+| `agent-token-ledger-v1.1.5-reports.zip` | 当前电脑生成的本地报告 | 否 |
+| `agent-token-ledger-v1.1.5-delivery.zip` | 源码、文档和本地报告的完整交付 | 否 |
+| `AgentTokenLedger-windows-x64-v1.1.5.zip` | Windows 可执行程序和发布文档 | 是 |
 
 每个 ZIP 都会同时生成 `.sha256` 校验文件。
 
@@ -306,6 +306,6 @@ powershell -ExecutionPolicy Bypass -File .\scripts\package.ps1
 
 ## 当前版本
 
-版本：`1.1.4`（最新版本以 [Releases](https://github.com/wakeup595626-cmyk/agent-token-ledger/releases) 为准）
+版本：`1.1.5`（最新版本以 [Releases](https://github.com/wakeup595626-cmyk/agent-token-ledger/releases) 为准）
 
 更新内容见 `CHANGELOG.md`。
