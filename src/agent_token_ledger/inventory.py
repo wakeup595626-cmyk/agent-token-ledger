@@ -86,13 +86,16 @@ def inventory_with_errors(
         ),
         InventoryItem(
             "DeepSeek Harness",
-            "aggregate",
+            "native",
             "supported",
-            [str(home / ".dsh" / "token-ledger" / "ledger.json")],
-            "已有的按天和路由汇总账本",
+            [
+                str((context.dsh_home or (home / ".dsh")) / "sessions"),
+                str((context.dsh_home or (home / ".dsh")) / "token-ledger" / "ledger.json"),
+            ],
+            "本机原生日志为主，插件汇总账本兜底",
             {
                 "source": "dsh",
-                "precision": "daily-route aggregate",
+                "precision": "request",
                 "read_only": True,
             },
         ),

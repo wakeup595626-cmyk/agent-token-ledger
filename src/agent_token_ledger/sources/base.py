@@ -13,6 +13,8 @@ class ScanContext:
     local_appdata: Path
     work_dir: Path
     max_file_bytes: int | None = None
+    dsh_home: Path | None = None
+    dsh_candidates: list[Path] | None = None
 
 
 @dataclass(slots=True)

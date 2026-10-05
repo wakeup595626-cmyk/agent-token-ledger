@@ -7,12 +7,13 @@
 | Codex | 本机原始记录 | `%USERPROFILE%\.codex\sessions`、`archived_sessions` | 请求级 |
 | Codex | Cockpit 会话镜像 | `%USERPROFILE%\.antigravity_cockpit\codex_session_usage.sqlite` | 请求级 |
 | Cockpit Gateway | 网关日志 | `%USERPROFILE%\.antigravity_cockpit\codex_local_access_logs.sqlite` | 请求级 |
-| DeepSeek Harness | 汇总账本 | `%USERPROFILE%\.dsh\token-ledger\ledger.json` | 日/路由汇总 |
+| DeepSeek Harness | 本机原生日志（插件账本兜底） | `%DSH_HOME%\sessions`（未设置时为 `%USERPROFILE%\.dsh\sessions`） | 请求级 |
 | WorkBuddy | 本机记录 | `%USERPROFILE%\.workbuddy\projects` | 请求级 |
 | WorkBuddy AI | 本机记录 | `%USERPROFILE%\.workbuddy-ai\projects` | 请求级 |
 | Trae | TraeTools 导出 | `%APPDATA%\TraeTools\data\usage_*.jsonl` | 请求级 |
 | Antigravity Tools | 代理统计 | `%USERPROFILE%\.antigravity_tools\token_stats.db` | 代理请求 |
 
+DeepSeek Harness 优先解析 `sessions` 目录下的原生日志；数据目录由 `DSH_HOME` 决定，未设置时回退 `%USERPROFILE%\.dsh`。程序还会浅层检查其它固定盘符的 `\.dsh` 与 `X:\Users\*\.dsh`，以便读取用户目录在 D 盘等其它盘符的机器，整个过程只读、不做全盘递归。
 ## 已复核但不支持可靠采集
 
 以下来源在当前复核中没有稳定、可解释的 Token 字段，或者数据会被加密、只有额度状态：

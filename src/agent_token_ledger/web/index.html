@@ -522,6 +522,15 @@
                   <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>
                   <span data-i18n="settings.copyDiagnostics">复制诊断信息</span>
                 </button>
+                <button id="backupExportButton" class="button" type="button">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12"/><path d="m7 11 5 5 5-5"/><path d="M5 19h14"/></svg>
+                  <span data-i18n="settings.exportBackup">导出备份</span>
+                </button>
+                <button id="backupImportButton" class="button" type="button">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 19h14"/></svg>
+                  <span data-i18n="settings.importBackup">导入备份</span>
+                </button>
+                <input id="backupFileInput" type="file" accept=".json,application/json" hidden>
                 <button id="clearCacheButton" class="button danger" type="button">
                   <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/><path d="M10 10v6M14 10v6"/></svg>
                   <span data-i18n="settings.clearCache">清除历史缓存</span>
@@ -532,6 +541,7 @@
                 </button>
               </div>
               <p class="runtime-actions-hint" data-i18n="settings.clearCacheHint">清除浏览器临时文件与运行日志，保留设置和当前统计结果。</p>
+              <p class="runtime-actions-hint" data-i18n="settings.backupHint">导出备份会把当前设置和统计记录保存为文件；导入会合并记录，重复项自动跳过。</p>
               <div class="runtime-safety">
                 <div class="runtime-safety-item">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6.5v5.2c0 4.8 3.3 8.1 8 9.3 4.7-1.2 8-4.5 8-9.3V6.5z"/><path d="M9 12.2 11 14l4-4"/></svg>

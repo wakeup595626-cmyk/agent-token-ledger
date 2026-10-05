@@ -49,6 +49,9 @@ DEFAULT_REFRESH_SECONDS = 30
 SCOPES = ("primary", "native", "visible")
 DIMENSIONS = ("agent", "source", "model", "account", "date", "kind")
 SEVERITY_ORDER = {"error": 0, "warning": 1, "info": 2}
+BACKUP_FORMAT = "agent-token-ledger-backup"
+BACKUP_SCHEMA_VERSION = 1
+BACKUP_MAX_BYTES = 256 * 1024 * 1024
 
 
 @dataclass(slots=True)
@@ -385,6 +388,112 @@ class LedgerService:
             ("\ufeff" + render_csv(value)).encode("utf-8"),
             "text/csv; charset=utf-8",
             "csv",
+        )
+
+    def export_backup(self) -> bytes:
+        """把当前设置与统计事件打包成可移植的 JSON 备份，不写入任何文件。"""
+
+        with self._lock:
+            exported_at_ms = now_ms()
+            payload = {
+                "format": BACKUP_FORMAT,
+                "schema_version": BACKUP_SCHEMA_VERSION,
+                "app_version": APP_VERSION,
+                "exported_at_ms": exported_at_ms,
+                "exported_at": iso_from_ms(exported_at_ms),
+                "preferences": copy.deepcopy(self.preferences),
+                "events": [
+                    _portable_event_dict(event)
+                    for event in self._events
+                ],
+            }
+        return json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
+    def import_backup(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """把备份 JSON 合并进当前内存统计，返回导入与去重结果。"""
+
+        if not isinstance(payload, dict):
+            raise ValueError("备份内容无效：不是有效的 JSON 对象")
+        if payload.get("format") != BACKUP_FORMAT:
+            raise ValueError("备份内容无效：不是本软件的备份文件")
+        try:
+            schema_version = int(payload.get("schema_version") or 0)
+        except (TypeError, ValueError):
+            schema_version = 0
+        if schema_version != BACKUP_SCHEMA_VERSION:
+            raise ValueError(f"备份版本不受支持：{schema_version}")
+
+        raw_events = payload.get("events")
+        if raw_events is None:
+            raw_events = []
+        if not isinstance(raw_events, list):
+            raise ValueError("备份内容无效：统计记录缺失或格式不正确")
+
+        preferences = payload.get("preferences")
+        imported_events = 0
+        skipped_duplicates = 0
+        skipped_invalid = 0
+        with self._lock:
+            seen = {
+                (event.source, event.event_key)
+                for event in self._events
+                if event.source and event.event_key
+            }
+            for item in raw_events:
+                if not isinstance(item, dict):
+                    skipped_invalid += 1
+                    continue
+                try:
+                    event = UsageEvent.from_dict(item)
+                except (TypeError, ValueError):
+                    skipped_invalid += 1
+                    continue
+                if not event.source or not event.event_key:
+                    skipped_invalid += 1
+                    continue
+                key = (event.source, event.event_key)
+                if key in seen:
+                    skipped_duplicates += 1
+                    continue
+                seen.add(key)
+                self._events.append(event)
+                imported_events += 1
+            self._rebuild_state_from_events()
+            if isinstance(preferences, dict):
+                try:
+                    self.update_preferences(preferences)
+                except OSError as exc:
+                    raise ValueError(
+                        f"导入设置保存失败：{type(exc).__name__}: {exc}"
+                    ) from exc
+        return {
+            "imported_events": imported_events,
+            "skipped_duplicates": skipped_duplicates,
+            "skipped_invalid": skipped_invalid,
+        }
+
+    def _rebuild_state_from_events(self) -> None:
+        """根据当前内存事件重算报告与校验结果，供导入后刷新界面使用。"""
+
+        generated_at_ms = now_ms()
+        report_sections = self._build_report_sections(
+            self._events,
+            generated_at_ms=generated_at_ms,
+        )
+        validation = validate_snapshot(
+            self._events,
+            list(self._state.get("issues") or []),
+        )
+        self._state.update(
+            {
+                **report_sections,
+                "validation": validation,
+                "source_runtime": _source_runtime(self._events),
+            }
         )
 
     def diagnostics(self) -> dict[str, Any]:
@@ -742,6 +851,17 @@ class LedgerRequestHandler(http.server.BaseHTTPRequestHandler):
                 filename=filename,
             )
             return
+        if path == "/api/backup/export":
+            body = self.service.export_backup()
+            self._send_download(
+                body,
+                content_type="application/json; charset=utf-8",
+                filename=(
+                    "agent-token-ledger-backup-"
+                    f"{date.today().isoformat()}.json"
+                ),
+            )
+            return
         if path == "/favicon.ico":
             self.send_response(204)
             self.send_header("Cache-Control", "no-store")
@@ -829,6 +949,33 @@ class LedgerRequestHandler(http.server.BaseHTTPRequestHandler):
             payload["action_result"] = {"ok": True, **result}
             self._send_json(payload)
             return
+        if path == "/api/backup/import":
+            try:
+                body = self._read_json_body(max_bytes=BACKUP_MAX_BYTES)
+            except ValueError as exc:
+                self._send_json(
+                    {"error": str(exc), "path": path},
+                    status=400,
+                )
+                return
+            if not body:
+                self._send_json(
+                    {"error": "未收到备份内容", "path": path},
+                    status=400,
+                )
+                return
+            try:
+                result = self.service.import_backup(body)
+            except ValueError as exc:
+                self._send_json(
+                    {"error": str(exc), "path": path},
+                    status=400,
+                )
+                return
+            payload = self.service.snapshot()
+            payload["action_result"] = {"ok": True, **result}
+            self._send_json(payload)
+            return
         if path == "/api/stop":
             self._send_json(
                 {
@@ -859,14 +1006,20 @@ class LedgerRequestHandler(http.server.BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
             return
 
-    def _read_json_body(self) -> dict[str, Any]:
+    def _read_json_body(
+        self,
+        *,
+        max_bytes: int = 1024 * 1024,
+    ) -> dict[str, Any]:
         try:
             length = int(self.headers.get("Content-Length", "0"))
         except ValueError:
             length = 0
         if length <= 0:
             return {}
-        raw = self.rfile.read(min(length, 1024 * 1024))
+        if length > max_bytes:
+            raise ValueError(f"请求内容过大，超过 {max_bytes} 字节限制")
+        raw = self.rfile.read(length)
         try:
             value = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
@@ -1222,6 +1375,47 @@ def _export_filename(
         f"agent-token-ledger-{safe_dimension or 'agent'}-"
         f"{safe_range or 'all'}.{extension}"
     )
+
+
+def _portable_event_dict(event: UsageEvent) -> dict[str, Any]:
+    """生成可移植的事件字典，移除本机专属的绝对路径。"""
+
+    data = event.to_dict()
+    for key in (
+        "non_cached_input_tokens",
+        "input_tokens_total",
+        "processed_tokens",
+        "non_cached_input_and_output_tokens",
+        "cache_semantics_verified",
+    ):
+        data.pop(key, None)
+    data["raw_ref"] = _redact_absolute_path(str(data.get("raw_ref") or ""))
+    metadata = data.get("metadata")
+    if isinstance(metadata, dict):
+        data["metadata"] = {
+            str(key): _redact_absolute_path(value)
+            for key, value in metadata.items()
+            if str(key) not in {"source_file", "source_root", "file_path", "path"}
+        }
+    return data
+
+
+def _redact_absolute_path(value: Any) -> Any:
+    if not isinstance(value, str) or not _is_absolute_path(value):
+        return value
+    text = value.strip()
+    return text.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
+
+
+def _is_absolute_path(value: str) -> bool:
+    text = value.strip()
+    if len(text) < 3:
+        return False
+    if text.startswith(("\\", "//")):
+        return True
+    if len(text) >= 2 and text[1] == ":":
+        return True
+    return text.startswith(("/", "\\"))
 
 
 def _resolve_period(

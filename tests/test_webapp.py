@@ -6,6 +6,7 @@ import tempfile
 import threading
 import time
 import unittest
+import urllib.error
 import urllib.request
 from pathlib import Path
 from unittest import mock
@@ -18,6 +19,7 @@ from agent_token_ledger.webapp import (
     LedgerService,
     ScanPayload,
     WEB_DIR,
+    _portable_event_dict,
     create_server,
 )
 
@@ -466,6 +468,123 @@ class WebappTests(unittest.TestCase):
                 service.stop()
 
         self.assertIn("<!doctype html>", DASHBOARD_HTML.lower())
+
+    def test_backup_export_and_import_merge_and_dedupe(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            service = LedgerService(
+                work_dir=Path(temp),
+                scanner=lambda: _payload(),
+            )
+            self.assertTrue(service.scan_once())
+            backup = json.loads(service.export_backup().decode("utf-8"))
+
+            self.assertEqual(backup["format"], "agent-token-ledger-backup")
+            self.assertEqual(backup["schema_version"], 1)
+            self.assertEqual(backup["app_version"], APP_VERSION)
+            self.assertEqual(len(backup["events"]), 4)
+            self.assertEqual(backup["preferences"]["language"], "zh-CN")
+
+            other = LedgerService(
+                work_dir=Path(temp) / "other",
+                scanner=lambda: _payload(),
+            )
+            first = other.import_backup(backup)
+            self.assertEqual(first["imported_events"], 4)
+            self.assertEqual(first["skipped_duplicates"], 0)
+            self.assertEqual(
+                other.snapshot()["scopes"]["primary"]["processed_tokens"],
+                1160,
+            )
+
+            second = other.import_backup(backup)
+            self.assertEqual(second["imported_events"], 0)
+            self.assertEqual(second["skipped_duplicates"], 4)
+
+    def test_backup_redacts_machine_specific_paths(self) -> None:
+        event = UsageEvent(
+            event_key="path-event",
+            source="codex_native",
+            agent="Codex",
+            source_kind=SourceKind.NATIVE,
+            timestamp_ms=1,
+            raw_ref="C:\\Users\\alice\\.codex\\sessions\\s.jsonl:12",
+            metadata={
+                "source_file": "C:\\Users\\alice\\.codex\\sessions\\s.jsonl",
+                "source_root": "C:\\Users\\alice\\.codex",
+                "format": "new",
+                "line_number": 12,
+            },
+        )
+        portable = _portable_event_dict(event)
+
+        self.assertNotIn("Users", portable["raw_ref"])
+        self.assertNotIn("processed_tokens", portable)
+        self.assertNotIn("input_tokens_total", portable)
+        self.assertNotIn("cache_semantics_verified", portable)
+        self.assertNotIn("source_file", portable["metadata"])
+        self.assertNotIn("source_root", portable["metadata"])
+        self.assertEqual(portable["metadata"]["format"], "new")
+        self.assertEqual(portable["metadata"]["line_number"], 12)
+
+    def test_backup_http_export_and_import(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            service = LedgerService(
+                work_dir=Path(temp),
+                scanner=lambda: _payload(),
+            )
+            service.scan_once()
+            server = create_server(service, port=0)
+            thread = threading.Thread(
+                target=server.serve_forever,
+                name="webapp-backup-test-server",
+                daemon=True,
+            )
+            thread.start()
+            host, port = server.server_address
+            base_url = f"http://{host}:{port}"
+            try:
+                with urllib.request.urlopen(
+                    f"{base_url}/api/backup/export", timeout=2
+                ) as response:
+                    content_type = response.headers["Content-Type"]
+                    disposition = response.headers["Content-Disposition"]
+                    backup = json.loads(response.read().decode("utf-8"))
+                self.assertEqual(content_type, "application/json; charset=utf-8")
+                self.assertIn("attachment", disposition)
+                self.assertEqual(backup["format"], "agent-token-ledger-backup")
+                self.assertEqual(len(backup["events"]), 4)
+
+                import_request = urllib.request.Request(
+                    f"{base_url}/api/backup/import",
+                    data=json.dumps(backup).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(
+                    import_request, timeout=2
+                ) as response:
+                    imported_state = json.loads(
+                        response.read().decode("utf-8")
+                    )
+                result = imported_state["action_result"]
+                self.assertTrue(result["ok"])
+                self.assertEqual(result["imported_events"], 0)
+                self.assertEqual(result["skipped_duplicates"], 4)
+
+                bad_request = urllib.request.Request(
+                    f"{base_url}/api/backup/import",
+                    data=json.dumps({"format": "wrong"}).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with self.assertRaises(urllib.error.HTTPError) as caught:
+                    urllib.request.urlopen(bad_request, timeout=2)
+                self.assertEqual(caught.exception.code, 400)
+                caught.exception.close()
+            finally:
+                server.shutdown()
+                server.server_close()
+                service.stop()
 
 
 def _payload() -> ScanPayload:

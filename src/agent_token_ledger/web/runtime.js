@@ -1611,6 +1611,66 @@
     }
   }
 
+  async function exportBackup() {
+    try {
+      const response = await fetch("/api/backup/export", { cache: "no-store" });
+      if (!response.ok) throw new Error("HTTP " + response.status);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      const today = new Date();
+      const stamp = [
+        today.getFullYear(),
+        String(today.getMonth() + 1).padStart(2, "0"),
+        String(today.getDate()).padStart(2, "0"),
+      ].join("-");
+      anchor.href = url;
+      anchor.download = "agent-token-ledger-backup-" + stamp + ".json";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      showNotice(t("settings.exportBackupDone"));
+    } catch (error) {
+      showNotice(t("settings.importBackupFailed"), "error");
+    }
+  }
+
+  function openBackupImport() {
+    const input = byId("backupFileInput");
+    if (input) input.click();
+  }
+
+  async function importBackupFile(file) {
+    if (!file) return;
+    try {
+      const raw = await file.text();
+      const payload = JSON.parse(raw);
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+        throw new Error("invalid backup");
+      }
+      if (!window.confirm(t("settings.importBackupConfirm"))) return;
+      const next = await post("/api/backup/import", payload);
+      state = next;
+      lastStateSignature = stateSignature(next);
+      render();
+      const result = next?.action_result || {};
+      if (result.ok) {
+        showNotice(
+          t("settings.importBackupResult", {
+            imported: result.imported_events || 0,
+            skipped: result.skipped_duplicates || 0,
+          }),
+        );
+        loadReport();
+      } else {
+        showNotice(result.message || t("settings.importBackupFailed"), "error");
+      }
+    } catch (error) {
+      showNotice(t("settings.importBackupFailed"), "error");
+    }
+  }
+
   function bindChartTooltip() {
     const svg = byId("usageChart");
     const tooltip = byId("chartTooltip");
@@ -1716,6 +1776,13 @@
       }
     });
     on("copyDiagnosticsButton", "click", copyDiagnostics);
+    on("backupExportButton", "click", exportBackup);
+    on("backupImportButton", "click", openBackupImport);
+    on("backupFileInput", "change", (event) => {
+      const file = event.target.files?.[0] || null;
+      importBackupFile(file);
+      event.target.value = "";
+    });
     on("customStartInput", "change", (event) => {
       customStartDate = event.target.value;
       if (customStartDate && customEndDate) {

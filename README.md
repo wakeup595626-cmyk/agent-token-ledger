@@ -34,7 +34,7 @@
 
 ### 安装和启动
 
-1. 从 GitHub Releases 下载 `AgentTokenLedger-windows-x64-v1.1.5.zip`（最新版本以 [Releases](https://github.com/wakeup595626-cmyk/agent-token-ledger/releases) 为准）。
+1. 从 GitHub Releases 下载 `AgentTokenLedger-windows-x64-v1.1.6.zip`（最新版本以 [Releases](https://github.com/wakeup595626-cmyk/agent-token-ledger/releases) 为准）。
 2. 将压缩包解压到任意可写目录，例如桌面上的独立文件夹。
 3. 双击 `AgentTokenLedger.exe`。
 4. 程序打开应用窗口后即可查看统计结果。
@@ -52,6 +52,7 @@
 - 关闭应用窗口会停止后台扫描服务并退出程序。
 - 如果程序已经运行，再次双击同一个 EXE 会打开已有服务对应的应用窗口。
 - “设置 → 运行控制”中有“停止本机服务”按钮，可确认后主动停止后台服务。
+- “设置 → 运行控制 → 导出备份 / 导入备份”可把当前设置和统计记录保存为 JSON 文件，或把备份合并回界面（重复记录自动跳过，不删除现有数据）。
 - “设置 → 运行控制 → 开机自动启动”默认关闭；只有在用户主动开启后，程序才会把当前 EXE 写入当前 Windows 用户的启动项。
 - 暂停按钮只暂停自动刷新，不影响手动刷新。
 
@@ -67,7 +68,7 @@
 | 用量明细 | 按 Agent 工具、模型、来源、账号、日期或记录类型查看 Token 与费用 |
 | 本机来源检测 | 当前电脑的检测结果和明细 |
 | 数据质量 | 数据校验、扫描问题和统计说明 |
-| 设置 | 语言、主题、币种、汇率、刷新间隔、开机自动启动、运行控制和数据位置 |
+| 设置 | 语言、主题、币种、汇率、刷新间隔、开机自动启动、运行控制、导出/导入备份和数据位置 |
 
 总览顶部固定显示总 Token、总输入、总输出、缓存命中和参考总费用。扫描状态栏显示最近扫描时间、下次刷新时间、扫描耗时和去重后的事件数。
 
@@ -149,7 +150,7 @@
 | Codex | `%USERPROFILE%\.codex\sessions`、`archived_sessions` | 请求级 |
 | Codex Cockpit 会话镜像 | `%USERPROFILE%\.antigravity_cockpit\codex_session_usage.sqlite` | 请求级 |
 | Cockpit Gateway | `%USERPROFILE%\.antigravity_cockpit\codex_local_access_logs.sqlite` | 请求级 |
-| DeepSeek Harness | `%USERPROFILE%\.dsh\token-ledger\ledger.json` | 日/路由汇总 |
+| DeepSeek Harness | `%DSH_HOME%\sessions`（未设置时为 `%USERPROFILE%\.dsh\sessions`，插件账本兜底） | 请求级 |
 | WorkBuddy | `%USERPROFILE%\.workbuddy\projects` | 请求级 |
 | WorkBuddy AI | `%USERPROFILE%\.workbuddy-ai\projects` | 请求级 |
 | Trae | `%APPDATA%\TraeTools\data\usage_*.jsonl` | 导出请求行 |
@@ -261,10 +262,10 @@ powershell -ExecutionPolicy Bypass -File .\scripts\package.ps1
 
 | 文件 | 用途 | 是否适合公开上传 |
 | --- | --- | --- |
-| `agent-token-ledger-v1.1.5-source.zip` | 公共源码、测试、脚本、文档和配置 | 是 |
-| `agent-token-ledger-v1.1.5-reports.zip` | 当前电脑生成的本地报告 | 否 |
-| `agent-token-ledger-v1.1.5-delivery.zip` | 源码、文档和本地报告的完整交付 | 否 |
-| `AgentTokenLedger-windows-x64-v1.1.5.zip` | Windows 可执行程序和发布文档 | 是 |
+| `agent-token-ledger-v1.1.6-source.zip` | 公共源码、测试、脚本、文档和配置 | 是 |
+| `agent-token-ledger-v1.1.6-reports.zip` | 当前电脑生成的本地报告 | 否 |
+| `agent-token-ledger-v1.1.6-delivery.zip` | 源码、文档和本地报告的完整交付 | 否 |
+| `AgentTokenLedger-windows-x64-v1.1.6.zip` | Windows 可执行程序和发布文档 | 是 |
 
 每个 ZIP 都会同时生成 `.sha256` 校验文件。
 
@@ -306,6 +307,6 @@ powershell -ExecutionPolicy Bypass -File .\scripts\package.ps1
 
 ## 当前版本
 
-版本：`1.1.5`（最新版本以 [Releases](https://github.com/wakeup595626-cmyk/agent-token-ledger/releases) 为准）
+版本：`1.1.6`（最新版本以 [Releases](https://github.com/wakeup595626-cmyk/agent-token-ledger/releases) 为准）
 
 更新内容见 `CHANGELOG.md`。

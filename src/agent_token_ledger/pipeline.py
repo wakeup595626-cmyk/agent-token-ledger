@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import string
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -32,12 +33,73 @@ def default_context(work_dir: Path) -> ScanContext:
     else:
         appdata = Path(os.environ.get("APPDATA") or user_home / ".config")
         local_appdata = Path(os.environ.get("LOCALAPPDATA") or user_home / ".local" / "share")
+    dsh_home, dsh_candidates = _resolve_dsh_locations(user_home)
     return ScanContext(
         home=user_home,
         appdata=appdata,
         local_appdata=local_appdata,
         work_dir=work_dir,
+        dsh_home=dsh_home,
+        dsh_candidates=dsh_candidates,
     )
+
+
+def _resolve_dsh_locations(user_home: Path) -> tuple[Path, list[Path]]:
+    r"""定位 DeepSeek Harness 的数据目录，并发现其它盘符上的候选目录。
+
+    优先读环境变量 DSH_HOME，未设置时回退 %USERPROFILE%\.dsh。为了让
+    换电脑、换盘符（例如用户目录在 D 盘）的机器也能扫到，只对固定盘符
+    做“盘符根 + Users 一层”的存在性检查，不做全盘递归，避免刷新变慢或
+    误入无权限目录。发现结果与主目录去重。
+    """
+    env_value = os.environ.get("DSH_HOME")
+    primary = (
+        Path(env_value.strip()).expanduser()
+        if env_value and env_value.strip()
+        else user_home / ".dsh"
+    )
+    primary_key = os.path.normcase(str(primary))
+    candidates: list[Path] = []
+    seen: set[str] = {primary_key}
+    if sys.platform != "win32":
+        return primary, candidates
+    for drive in _fixed_drive_roots():
+        root_candidate = drive / ".dsh"
+        if root_candidate.is_dir():
+            key = os.path.normcase(str(root_candidate))
+            if key not in seen:
+                seen.add(key)
+                candidates.append(root_candidate)
+        users_dir = drive / "Users"
+        try:
+            children = list(users_dir.iterdir())
+        except OSError:
+            continue
+        for child in children:
+            try:
+                if not child.is_dir():
+                    continue
+            except OSError:
+                continue
+            candidate = child / ".dsh"
+            if candidate.is_dir():
+                key = os.path.normcase(str(candidate))
+                if key not in seen:
+                    seen.add(key)
+                    candidates.append(candidate)
+    return primary, candidates
+
+
+def _fixed_drive_roots() -> list[Path]:
+    roots: list[Path] = []
+    for letter in string.ascii_uppercase:
+        root = Path(f"{letter}:\\")
+        try:
+            if root.exists():
+                roots.append(root)
+        except OSError:
+            continue
+    return roots
 
 
 def default_adapters(*, include_gateway: bool = True) -> list[SourceAdapter]:
@@ -210,8 +272,6 @@ def persist_scan(
         database.connection.rollback()
         database.finish_run(scan_id, "failed", f"{type(exc).__name__}: {exc}")
         raise
-    # 本次扫描落库成功后，清掉超出保留数量的历史批次，回收磁盘。
-    # keep_scans=0 表示关闭自动清理（供测试或特殊场景使用）。
     effective_keep = (
         database.DEFAULT_KEEP_SCANS if keep_scans is None else int(keep_scans)
     )
