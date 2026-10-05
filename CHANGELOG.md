@@ -2,6 +2,14 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 1.1.8 - 2026-10-05
+
+- 数据目录改为优先放到非系统盘的固定盘符：Windows 下按盘符顺序找第一个可写、非系统盘的本地固定磁盘（DRIVE_FIXED），把运行数据写入 `<非系统盘>:\AgentTokenLedger`；没有可用非系统盘时才回退 `%LOCALAPPDATA%\AgentTokenLedger`。可移动盘、光驱、网络盘和内存盘一律不选，避免把数据写到随手插的 U 盘或网盘映射上。
+- 增加环境变量 `AGENT_TOKEN_LEDGER_DATA_DIR` 作为显式覆盖，便于把数据放到任意指定位置；所有路径都在运行时解析，不写死用户名或盘符。
+- 首次切到新目录时，自动把旧 `%LOCALAPPDATA%\AgentTokenLedger` 下的设置文件和两个解析缓存复制过去，避免设置丢失，也避免第一次刷新退化为全量重新解析；只复制、不删除旧目录。
+- 新增回归测试：环境变量覆盖、非系统盘优先、无可用非系统盘时回退、旧数据迁移与不覆盖目标文件。
+- Windows 单文件版同步更新为 1.1.8。Linux 与 macOS 仍为兼容启动，未在真实 Linux/macOS 机器上实测。
+
 ## 1.1.7 - 2026-10-05
 
 - DeepSeek Harness 改为直接解析本机原生日志（`%DSH_HOME%\sessions\**\session*.jsonl(.zstd)`），不再依赖第三方插件 `dsh-token-ledger` 生成的汇总账本；朋友电脑只装 DeepSeek Harness、没装插件时也能扫到用量，插件账本只在没有原生日志时兜底。

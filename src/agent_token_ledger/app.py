@@ -4,6 +4,7 @@ import argparse
 import logging
 from logging.handlers import RotatingFileHandler
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -27,7 +28,7 @@ def main(argv: list[str] | None = None) -> int:
         "--work-dir",
         type=Path,
         default=None,
-        help="扫描工作目录；默认写入本用户 LocalAppData",
+        help="扫描工作目录；默认写入本用户数据目录",
     )
     parser.add_argument(
         "--host",
@@ -71,6 +72,7 @@ def main(argv: list[str] | None = None) -> int:
     data_dir = (args.work_dir or _default_data_dir()).expanduser()
     data_dir.mkdir(parents=True, exist_ok=True)
     _configure_logging(data_dir / "agent-token-ledger.log")
+    _migrate_legacy_data(data_dir)
     if args.startup:
         logging.info("Agent Token Ledger launched from the Windows startup entry")
     try:
@@ -90,6 +92,23 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _default_data_dir() -> Path:
+    """确定本机数据目录：优先放在非系统盘的可写固定盘符上。
+
+    读取顺序：
+    1. 环境变量 AGENT_TOKEN_LEDGER_DATA_DIR（显式覆盖，供高级用户使用）。
+    2. Windows 下第一个可写、非系统盘的固定盘符（DRIVE_FIXED），目录名为
+       AgentTokenLedger；没有可用非系统盘时回退 LocalAppData。
+    3. 非 Windows 平台沿用各系统惯例路径。
+    所有路径都在运行时解析，不写死用户名或盘符。
+    """
+    override = os.environ.get("AGENT_TOKEN_LEDGER_DATA_DIR")
+    if override and override.strip():
+        return Path(override.strip()).expanduser()
+    if sys.platform == "win32":
+        for root in _non_system_fixed_roots():
+            candidate = root / "AgentTokenLedger"
+            if _ensure_writable_dir(candidate):
+                return candidate
     local_appdata = os.environ.get("LOCALAPPDATA")
     if local_appdata:
         return Path(local_appdata) / "AgentTokenLedger"
@@ -98,6 +117,94 @@ def _default_data_dir() -> Path:
     if sys.platform != "win32":
         return Path.home() / ".local" / "share" / "AgentTokenLedger"
     return Path.home() / ".agent-token-ledger"
+
+
+def _non_system_fixed_roots() -> list[Path]:
+    """返回除系统盘外的固定盘符根目录（按盘符顺序）。
+
+    只收 DRIVE_FIXED（本地固定磁盘），排除可移动盘、光驱、网络盘和内存盘，
+    避免把数据写到随手插的 U 盘或网盘映射上。
+    """
+    if sys.platform != "win32":
+        return []
+    try:
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        bits = kernel32.GetLogicalDrives()
+        if not bits:
+            return []
+        system_drive = (os.environ.get("SystemDrive") or "").rstrip("\\").upper()
+        roots: list[Path] = []
+        for index in range(26):
+            if not (bits >> index) & 1:
+                continue
+            letter = chr(ord("A") + index)
+            drive = f"{letter}:"
+            try:
+                drive_type = kernel32.GetDriveTypeW(f"{drive}\\")
+            except Exception:
+                continue
+            if drive_type != 3:  # DRIVE_FIXED
+                continue
+            if system_drive and drive.upper() == system_drive:
+                continue
+            roots.append(Path(f"{drive}\\"))
+        return roots
+    except Exception:
+        return []
+
+
+def _ensure_writable_dir(path: Path) -> bool:
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        probe = path / ".write-probe"
+        probe.write_text("", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+        return True
+    except OSError:
+        return False
+
+
+def _local_appdata_data_dir() -> Path | None:
+    local_appdata = os.environ.get("LOCALAPPDATA")
+    if not local_appdata:
+        return None
+    return Path(local_appdata) / "AgentTokenLedger"
+
+
+#: 从旧 LocalAppData 目录迁移到新数据目录时，需要保留的运行期文件。
+_MIGRATABLE_FILES = (
+    "settings.json",
+    "codex_native_cache_v1.json",
+    "dsh_native_cache_v1.json",
+)
+
+
+def _migrate_legacy_data(data_dir: Path) -> None:
+    """把旧数据目录中的设置与解析缓存复制到当前数据目录。
+
+    只做复制、不删除旧目录：旧目录里的文件属于用户已有数据，迁移失败或用户
+    想回退时仍可手动处理。目标文件已存在时跳过，避免覆盖本次运行的新写入。
+    """
+    legacy = _local_appdata_data_dir()
+    if legacy is None:
+        return
+    try:
+        if legacy.resolve() == data_dir.resolve():
+            return
+    except OSError:
+        pass
+    for name in _MIGRATABLE_FILES:
+        source = legacy / name
+        target = data_dir / name
+        if not source.is_file() or target.exists():
+            continue
+        try:
+            shutil.copy2(source, target)
+            logging.info("已将旧数据目录中的 %s 复制到当前数据目录", name)
+        except OSError:
+            logging.warning("复制旧数据文件失败：%s", name, exc_info=True)
 
 
 def _configure_logging(path: Path) -> None:

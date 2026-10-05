@@ -38,7 +38,7 @@ AgentTokenLedger.exe
 
 ## 平台与数据目录
 
-- Windows（当前发布与实测平台）：数据目录为 `%LOCALAPPDATA%\AgentTokenLedger`；扫描上下文解析 `%USERPROFILE%`、`%APPDATA%`、`%LOCALAPPDATA%`；窗口优先使用 Edge WebView2（`edgechromium`）。
+- Windows（当前发布与实测平台）：数据目录优先取第一个可写、非系统盘的本地固定磁盘，即 `<非系统盘>:\AgentTokenLedger`（无可用非系统盘时回退 `%LOCALAPPDATA%\AgentTokenLedger`，环境变量 `AGENT_TOKEN_LEDGER_DATA_DIR` 可显式覆盖）；扫描上下文解析 `%USERPROFILE%`、`%APPDATA%`、`%LOCALAPPDATA%`；窗口优先使用 Edge WebView2（`edgechromium`）。
 - Linux（兼容启动，未实测）：数据目录为 `~/.local/share/AgentTokenLedger`；`appdata` 解析为 `~/.config`，`local_appdata` 解析为 `~/.local/share`；窗口使用系统默认 WebView 后端。
 - macOS（兼容启动，未实测）：数据目录为 `~/Library/Application Support/AgentTokenLedger`；`appdata` 与 `local_appdata` 均解析为 `~/Library/Application Support`；窗口使用系统默认 WebView 后端。
 

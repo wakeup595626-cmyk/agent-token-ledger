@@ -39,11 +39,13 @@
 3. 双击 `AgentTokenLedger.exe`。
 4. 程序打开应用窗口后即可查看统计结果。
 
-也可以把 `AgentTokenLedger.exe` 单独放到桌面使用。程序自己的日志和 WebView 缓存会写入：
+也可以把 `AgentTokenLedger.exe` 单独放到桌面使用。程序自己的运行数据（设置、运行日志、WebView 临时文件、解析缓存）默认写入第一个可写的非系统盘固定磁盘：
 
 ```text
-%LOCALAPPDATA%\AgentTokenLedger
+<非系统盘>:\AgentTokenLedger
 ```
+
+例如系统盘是 C 盘、D 盘是本地固定磁盘时，写入 `D:\AgentTokenLedger`。没有可用的非系统盘时回退到 `%LOCALAPPDATA%\AgentTokenLedger`；需要指定位置时可设置环境变量 `AGENT_TOKEN_LEDGER_DATA_DIR`。设置页“关于”里会显示当前实际数据目录，也可以点“打开数据目录”直接查看。
 
 这些运行数据与来源工具的原始日志分开保存。运行日志会按大小自动轮转（约 1 MB 一份、保留两份备份），也可以在“设置 → 运行控制 → 清除历史缓存”里连同浏览器临时文件一并清掉；解析缓存会保留，因为它是加快每次刷新速度的关键。
 
