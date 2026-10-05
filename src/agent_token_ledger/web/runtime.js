@@ -1549,20 +1549,50 @@
     }
   }
 
+  function copyText(value) {
+    if (navigator.clipboard?.writeText) {
+      return navigator.clipboard
+        .writeText(value)
+        .catch(() => legacyCopyText(value));
+    }
+    return legacyCopyText(value);
+  }
+
+  function legacyCopyText(value) {
+    const area = document.createElement("textarea");
+    area.value = value;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.top = "0";
+    area.style.left = "0";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    const selection = document.getSelection();
+    const previousRange =
+      selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+    area.focus();
+    area.select();
+    area.setSelectionRange(0, area.value.length);
+    let copied = false;
+    try {
+      copied = document.execCommand("copy");
+    } finally {
+      area.remove();
+      if (previousRange && selection) {
+        selection.removeAllRanges();
+        selection.addRange(previousRange);
+      }
+    }
+    if (!copied) {
+      throw new Error("copy failed");
+    }
+  }
+
   async function copyDiagnostics() {
     try {
       const data = await fetchJson("/api/diagnostics");
       const value = JSON.stringify(data, null, 2);
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(value);
-      } else {
-        const area = document.createElement("textarea");
-        area.value = value;
-        document.body.appendChild(area);
-        area.select();
-        document.execCommand("copy");
-        area.remove();
-      }
+      await copyText(value);
       showSaveState(t("action.copied"));
     } catch (error) {
       showSaveState(t("action.copyFailed"), "error");

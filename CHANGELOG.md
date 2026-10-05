@@ -2,7 +2,10 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## 未发布
+## 1.1.3 - 2026-10-05
+
+- 修复设置页“复制诊断信息”（复制整段信息）按钮点击后无法复制的问题：优先使用异步剪贴板 navigator.clipboard.writeText，在 WebView2 因权限受限而拒绝时自动回退到隐藏文本框加 document.execCommand("copy") 的同步方案，并校验写入返回值；仅当两种方案都失败时才提示“复制失败”，避免此前一进 catch 就报错、永远复制不上的情况。
+- Windows 单文件版同步更新为 1.1.3。Linux 与 macOS 仍为兼容启动，未在真实 Linux/macOS 机器上实测。
 
 ## 1.1.2 - 2026-10-03
 
