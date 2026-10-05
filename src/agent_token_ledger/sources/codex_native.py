@@ -1,14 +1,21 @@
 from __future__ import annotations
 
+import json
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 import re
+import shutil
 
-from ..model import Quality, SourceKind, UsageEvent
+from ..model import Quality, ScanIssue, SourceKind, UsageEvent
 from ..timeutil import now_ms, to_epoch_ms
 from .base import ScanContext, ScanResult, SourceAdapter
-from .utils import file_stat, first_int, first_text, issue, iter_jsonl
+from .utils import file_fingerprint, file_stat, first_int, first_text, issue, iter_jsonl
+
+
+#: 按文件解析缓存的版本号。解析逻辑变化导致缓存字段不兼容时递增。
+_CACHE_VERSION = 1
+_CACHE_FILENAME = "codex_native_cache_v1.json"
 
 
 @dataclass(slots=True)
@@ -31,6 +38,10 @@ class CodexNativeAdapter(SourceAdapter):
             context.home / ".codex" / "sessions",
             context.home / ".codex" / "archived_sessions",
         ]
+        cache = _load_cache(context)
+        cached_files = cache.get("files", {})
+        changed = False
+        seen_paths: set[str] = set()
         result = ScanResult(source=self.name)
         for root in roots:
             if not root.exists():
@@ -44,12 +55,28 @@ class CodexNativeAdapter(SourceAdapter):
                 else "archived_sessions"
             )
             for path in sorted(root.rglob("*.jsonl")):
-                parsed = _parse_file(
-                    path,
-                    self.name,
-                    self.agent,
-                    source_root=source_root,
-                )
+                cache_key = str(path)
+                seen_paths.add(cache_key)
+                fingerprint = file_fingerprint(path)
+                cached = cached_files.get(cache_key)
+                parsed = None
+                if isinstance(cached, dict) and cached.get("fingerprint") == fingerprint:
+                    parsed = _parsed_from_cache(cached)
+                if parsed is None:
+                    parsed = _parse_file(
+                        path,
+                        self.name,
+                        self.agent,
+                        source_root=source_root,
+                    )
+                    cached_files[cache_key] = {
+                        "fingerprint": fingerprint,
+                        "events": [event.to_dict() for event in parsed.events],
+                        "issues": [asdict(item) for item in parsed.issues],
+                        "errors": parsed.errors,
+                        "had_usage_records": parsed.had_usage_records,
+                    }
+                    changed = True
                 result.events.extend(parsed.events)
                 result.issues.extend(parsed.issues)
                 result.snapshots.append(
@@ -65,6 +92,11 @@ class CodexNativeAdapter(SourceAdapter):
                         },
                     )
                 )
+        stale_keys = [key for key in cached_files if key not in seen_paths]
+        for key in stale_keys:
+            cached_files.pop(key, None)
+        if stale_keys or changed:
+            _save_cache(context, cache)
         return result
 
 
@@ -268,3 +300,69 @@ def _file_id(path: Path) -> str:
         path.stem,
     )
     return match.group(1) if match else path.stem
+
+
+def _load_cache(context: ScanContext) -> dict:
+    empty = {"version": _CACHE_VERSION, "files": {}}
+    path = context.work_dir / _CACHE_FILENAME
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        return empty
+    if not isinstance(data, dict) or data.get("version") != _CACHE_VERSION:
+        return empty
+    files = data.get("files")
+    if not isinstance(files, dict):
+        return empty
+    return {"version": _CACHE_VERSION, "files": files}
+
+
+def _save_cache(context: ScanContext, cache: dict) -> None:
+    """Best-effort 写入解析缓存，失败静默忽略，不影响扫描结果。"""
+    path = context.work_dir / _CACHE_FILENAME
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with tmp_path.open("w", encoding="utf-8") as handle:
+            json.dump(cache, handle, ensure_ascii=False, separators=(",", ":"))
+        try:
+            tmp_path.replace(path)
+        except OSError as exc:
+            # EFS 加密目录即使临时文件与目标同目录，os.replace 也可能报 WinError 17，
+            # 回退为复制覆盖，保证缓存仍能落盘。
+            if getattr(exc, "winerror", None) != 17:
+                raise
+            shutil.copyfile(tmp_path, path)
+            tmp_path.unlink(missing_ok=True)
+    except OSError:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def _parsed_from_cache(cached: dict) -> _ParsedCodex | None:
+    """把缓存字典还原成解析结果；任何字段不合法都返回 None 触发重解析。"""
+    events: list[UsageEvent] = []
+    for item in cached.get("events") or []:
+        if not isinstance(item, dict):
+            return None
+        try:
+            events.append(UsageEvent.from_dict(item))
+        except (TypeError, ValueError, KeyError):
+            return None
+    issues: list[ScanIssue] = []
+    for item in cached.get("issues") or []:
+        if not isinstance(item, dict):
+            return None
+        try:
+            issues.append(ScanIssue(**item))
+        except TypeError:
+            return None
+    return _ParsedCodex(
+        events=events,
+        issues=issues,
+        errors=int(cached.get("errors") or 0),
+        had_usage_records=bool(cached.get("had_usage_records")),
+    )

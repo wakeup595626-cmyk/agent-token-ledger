@@ -4,7 +4,9 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
+from agent_token_ledger.sources import codex_native
 from agent_token_ledger.sources.base import ScanContext
 from agent_token_ledger.sources.codex_native import CodexNativeAdapter
 
@@ -174,6 +176,99 @@ class CodexNativeTests(unittest.TestCase):
                 ]
             )
             self.assertEqual(second.metadata["provider_total_delta"], 30)
+
+    def test_scan_reuses_cache_for_unchanged_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self._write(
+                root,
+                "sessions/2026/10/02/rollout-33333333-3333-3333-3333-333333333333.jsonl",
+                [
+                    {
+                        "timestamp": "2026-10-02T00:00:00Z",
+                        "type": "token_usage_record",
+                        "payload": {
+                            "session_id": "session-cache",
+                            "turn_id": "turn-1",
+                            "response_id": "response-1",
+                            "usage": {
+                                "input_tokens": 500,
+                                "cached_input_tokens": 200,
+                                "output_tokens": 80,
+                                "total_tokens": 580,
+                            },
+                        },
+                    },
+                ],
+            )
+            adapter = CodexNativeAdapter(roots=[root / "sessions"])
+            context = self._context(root)
+
+            first = adapter.scan(context)
+            self.assertEqual(len(first.events), 1)
+            self.assertTrue(
+                (context.work_dir / "codex_native_cache_v1.json").is_file()
+            )
+
+            parse_calls: list[Path] = []
+            real_parse = codex_native._parse_file
+
+            def counting_parse(*args, **kwargs):
+                parse_calls.append(args[0])
+                return real_parse(*args, **kwargs)
+
+            with mock.patch.object(
+                codex_native, "_parse_file", side_effect=counting_parse
+            ):
+                second = adapter.scan(context)
+
+            self.assertEqual(len(second.events), 1)
+            self.assertEqual(parse_calls, [])
+            self.assertEqual(
+                second.events[0].to_dict()["input_tokens"],
+                first.events[0].to_dict()["input_tokens"],
+            )
+
+    def test_save_cache_falls_back_when_replace_is_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self._write(
+                root,
+                "sessions/2026/10/02/rollout-44444444-4444-4444-4444-444444444444.jsonl",
+                [
+                    {
+                        "timestamp": "2026-10-02T00:00:00Z",
+                        "type": "token_usage_record",
+                        "payload": {
+                            "session_id": "session-efs",
+                            "turn_id": "turn-1",
+                            "response_id": "response-1",
+                            "usage": {
+                                "input_tokens": 10,
+                                "cached_input_tokens": 0,
+                                "output_tokens": 5,
+                                "total_tokens": 15,
+                            },
+                        },
+                    },
+                ],
+            )
+            adapter = CodexNativeAdapter(roots=[root / "sessions"])
+            context = self._context(root)
+
+            replace_error = OSError("cannot move across encrypted volumes")
+            replace_error.winerror = 17
+            with mock.patch.object(
+                Path, "replace", side_effect=replace_error
+            ):
+                result = adapter.scan(context)
+
+            self.assertEqual(len(result.events), 1)
+            cache_path = context.work_dir / "codex_native_cache_v1.json"
+            self.assertTrue(cache_path.is_file())
+            cached = json.loads(cache_path.read_text(encoding="utf-8"))
+            self.assertEqual(len(cached["files"]), 1)
+
 
 
 if __name__ == "__main__":

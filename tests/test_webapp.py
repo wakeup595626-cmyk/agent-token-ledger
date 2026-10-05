@@ -76,15 +76,11 @@ class WebappTests(unittest.TestCase):
                 state["scopes"]["visible"]["cost_usd"],
                 0.45,
             )
-            self.assertEqual(
-                len(state["reports"]["primary"]["agent"]["groups"]),
-                2,
-            )
+            self.assertEqual(state["scopes"]["primary"]["events"], 2)
             self.assertEqual(len(state["source_runtime"]), 4)
-            self.assertEqual(
-                state["reports"]["visible"]["source"]["overall"]["events"],
-                4,
-            )
+            self.assertEqual(state["scopes"]["visible"]["events"], 4)
+            self.assertIsInstance(state["notes"], list)
+            self.assertTrue(any("日常总用量" in note for note in state["notes"]))
             self.assertEqual(state["source_summary"]["total"], 1)
             self.assertEqual(state["source_summary"]["detected"], 1)
             self.assertEqual(state["version"], APP_VERSION)

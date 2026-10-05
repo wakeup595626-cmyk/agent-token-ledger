@@ -33,6 +33,7 @@
   let pendingPriceTableRender = false;
   let settingsSaveTimer = null;
   let startupBusy = false;
+  let noticeTimer = null;
   let currentChartPoints = [];
   let currentHeatmapPoints = new Map();
   let systemThemeQuery = null;
@@ -1362,6 +1363,17 @@
     text(saved, message);
   }
 
+  function showNotice(message, type = "ok") {
+    const notice = byId("appNotice");
+    if (!notice) return;
+    window.clearTimeout(noticeTimer);
+    notice.className = `app-notice visible${type === "error" ? " error" : ""}`;
+    text(notice, message);
+    noticeTimer = window.setTimeout(() => {
+      notice.classList.remove("visible");
+    }, 2200);
+  }
+
   async function togglePaused() {
     const nextPaused = !Boolean(state?.paused);
     if (state) {
@@ -1593,9 +1605,9 @@
       const data = await fetchJson("/api/diagnostics");
       const value = JSON.stringify(data, null, 2);
       await copyText(value);
-      showSaveState(t("action.copied"));
+      showNotice(t("action.copied"));
     } catch (error) {
-      showSaveState(t("action.copyFailed"), "error");
+      showNotice(t("action.copyFailed"), "error");
     }
   }
 

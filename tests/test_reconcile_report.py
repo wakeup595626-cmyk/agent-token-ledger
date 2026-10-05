@@ -4,7 +4,11 @@ import unittest
 
 from agent_token_ledger.model import Quality, SourceKind, UsageEvent
 from agent_token_ledger.pipeline import reconcile
-from agent_token_ledger.reporting import report
+from agent_token_ledger.reporting import (
+    build_scope_summaries,
+    report,
+    report_dimensions,
+)
 
 
 def _event(
@@ -110,6 +114,88 @@ class ReconcileAndReportTests(unittest.TestCase):
         self.assertEqual(native.overall.processed_tokens, 120)
         self.assertEqual(visible.overall.processed_tokens, 360)
         self.assertEqual(visible.groups[0].group, "2027-01-15")
+
+    def test_report_dimensions_matches_individual_reports(self) -> None:
+        events = [
+            _event(
+                source="codex_native",
+                agent="Codex",
+                kind=SourceKind.NATIVE,
+                event_key="native-a",
+            ),
+            _event(
+                source="codex_native",
+                agent="Codex",
+                kind=SourceKind.NATIVE,
+                event_key="native-b",
+                input_tokens=200,
+                output_tokens=40,
+            ),
+            _event(
+                source="dsh",
+                agent="DeepSeek Harness",
+                kind=SourceKind.AGGREGATE,
+                event_key="dsh",
+                quality=Quality.AGGREGATE,
+            ),
+        ]
+
+        dimensions = ("agent", "source", "model", "account", "date", "kind")
+        batched = report_dimensions(
+            events,
+            scope="primary",
+            dimensions=dimensions,
+        )
+        self.assertEqual(set(batched), set(dimensions))
+
+        for dimension in dimensions:
+            single = report(events, scope="primary", dimension=dimension)
+            self.assertEqual(
+                batched[dimension].overall.to_dict(),
+                single.overall.to_dict(),
+            )
+            self.assertEqual(
+                [group.to_dict() for group in batched[dimension].groups],
+                [group.to_dict() for group in single.groups],
+            )
+            self.assertEqual(batched[dimension].notes, single.notes)
+
+    def test_build_scope_summaries_matches_agent_report_overall(self) -> None:
+        events = [
+            _event(
+                source="codex_native",
+                agent="Codex",
+                kind=SourceKind.NATIVE,
+                event_key="native",
+            ),
+            _event(
+                source="dsh",
+                agent="DeepSeek Harness",
+                kind=SourceKind.AGGREGATE,
+                event_key="dsh",
+                quality=Quality.AGGREGATE,
+            ),
+            _event(
+                source="cockpit_gateway",
+                agent="Cockpit Gateway",
+                kind=SourceKind.GATEWAY,
+                event_key="gateway",
+            ),
+        ]
+
+        summaries = build_scope_summaries(
+            events,
+            scopes=("primary", "native", "visible"),
+        )
+        self.assertEqual(set(summaries), {"primary", "native", "visible"})
+
+        for scope in ("primary", "native", "visible"):
+            single = report(events, scope=scope, dimension="agent")
+            self.assertEqual(
+                summaries[scope]["overall"].to_dict(),
+                single.overall.to_dict(),
+            )
+            self.assertEqual(summaries[scope]["notes"], single.notes)
 
 
 if __name__ == "__main__":

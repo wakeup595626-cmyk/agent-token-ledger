@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 from collections.abc import Iterator
 from pathlib import Path
@@ -35,16 +34,8 @@ def file_stat(
     event_count: int,
     error_count: int,
     metadata: dict[str, Any] | None = None,
-    hash_limit_bytes: int = 64 * 1024 * 1024,
 ) -> SourceStat:
     stat = path.stat()
-    fingerprint = f"stat:{stat.st_size}:{stat.st_mtime_ns}"
-    if stat.st_size <= hash_limit_bytes:
-        digest = hashlib.sha256()
-        with path.open("rb") as handle:
-            while chunk := handle.read(1024 * 1024):
-                digest.update(chunk)
-        fingerprint = "sha256:" + digest.hexdigest()
     return SourceStat(
         source=source,
         path=str(path),
@@ -53,9 +44,20 @@ def file_stat(
         scanned_at_ms=now_ms(),
         event_count=event_count,
         error_count=error_count,
-        fingerprint=fingerprint,
+        fingerprint=file_fingerprint(path),
         metadata=metadata or {},
     )
+
+
+def file_fingerprint(path: Path) -> str:
+    """Return a cheap, stable fingerprint for a source file.
+
+    只使用文件大小和纳秒级修改时间，不再对文件内容做全量哈希。这样每次
+    扫描都能以 O(1) 成本判断来源文件是否变化，避免为几个 GB 的会话日志
+    反复计算 SHA-256 而拖慢刷新。
+    """
+    stat = path.stat()
+    return f"stat:{stat.st_size}:{stat.st_mtime_ns}"
 
 
 def issue(

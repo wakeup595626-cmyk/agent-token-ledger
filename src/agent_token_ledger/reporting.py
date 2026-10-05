@@ -192,6 +192,42 @@ class Report:
         }
 
 
+def _select_events(
+    events: list[UsageEvent],
+    scope: str,
+    agent: str = "",
+    model: str = "",
+    account: str = "",
+    start_ms: int | None = None,
+    end_ms: int | None = None,
+) -> list[UsageEvent]:
+    return [
+        event
+        for event in events
+        if _scope_matches(event, scope)
+        and (not agent or event.agent.casefold() == agent.casefold())
+        and (not model or event.model.casefold() == model.casefold())
+        and (not account or event.account.casefold() == account.casefold())
+        and (start_ms is None or event.timestamp_ms >= start_ms)
+        and (end_ms is None or event.timestamp_ms <= end_ms)
+    ]
+
+
+def _report_notes(
+    scope: str,
+    selected: list[UsageEvent],
+    overall: Aggregate,
+) -> list[str]:
+    notes = _scope_notes(scope)
+    if any(event.quality != event.quality.EXACT for event in selected):
+        notes.append("包含聚合或估算事件，无法与逐请求账本同等精确。")
+    if overall.cost_estimated_events:
+        notes.append(
+            "参考总费用由实采金额和未采集费用的参考估算组成，不等同于实际账单。"
+        )
+    return notes
+
+
 def report(
     events: list[UsageEvent],
     *,
@@ -209,16 +245,15 @@ def report(
         raise ValueError(f"不支持的分组维度：{dimension}")
     if scope not in {"primary", "native", "visible"}:
         raise ValueError(f"不支持的统计口径：{scope}")
-    selected = [
-        event
-        for event in events
-        if _scope_matches(event, scope)
-        and (not agent or event.agent.casefold() == agent.casefold())
-        and (not model or event.model.casefold() == model.casefold())
-        and (not account or event.account.casefold() == account.casefold())
-        and (start_ms is None or event.timestamp_ms >= start_ms)
-        and (end_ms is None or event.timestamp_ms <= end_ms)
-    ]
+    selected = _select_events(
+        events,
+        scope,
+        agent=agent,
+        model=model,
+        account=account,
+        start_ms=start_ms,
+        end_ms=end_ms,
+    )
     grouped: dict[str, Aggregate] = {}
     overall = Aggregate(group="all")
     selected_by_group: dict[str, list[UsageEvent]] = {}
@@ -237,13 +272,6 @@ def report(
         grouped.values(),
         key=lambda item: (-item.processed_tokens, item.group.casefold()),
     )
-    notes = _scope_notes(scope)
-    if any(event.quality != event.quality.EXACT for event in selected):
-        notes.append("包含聚合或估算事件，无法与逐请求账本同等精确。")
-    if overall.cost_estimated_events:
-        notes.append(
-            "参考总费用由实采金额和未采集费用的参考估算组成，不等同于实际账单。"
-        )
     return Report(
         scope=scope,
         dimension=dimension,
@@ -257,8 +285,108 @@ def report(
             "start_ms": start_ms,
             "end_ms": end_ms,
         },
-        notes=notes,
+        notes=_report_notes(scope, selected, overall),
     )
+
+
+def report_dimensions(
+    events: list[UsageEvent],
+    *,
+    scope: str,
+    dimensions: tuple[str, ...] | list[str],
+    agent: str = "",
+    model: str = "",
+    account: str = "",
+    start_ms: int | None = None,
+    end_ms: int | None = None,
+    generated_at_ms: int | None = None,
+    prices: Mapping[str, Mapping[str, float]] | None = None,
+) -> dict[str, Report]:
+    """Build all dimension reports for one scope, filtering only once.
+
+    All dimensions share the same scope filter and overall aggregate, which is
+    what makes this faster than calling report once per dimension.
+    """
+
+    if scope not in {"primary", "native", "visible"}:
+        raise ValueError(f"不支持的统计口径：{scope}")
+    valid_dimensions = {"agent", "source", "model", "account", "date", "kind"}
+    for dimension in dimensions:
+        if dimension not in valid_dimensions:
+            raise ValueError(f"不支持的分组维度：{dimension}")
+
+    selected = _select_events(
+        events,
+        scope,
+        agent=agent,
+        model=model,
+        account=account,
+        start_ms=start_ms,
+        end_ms=end_ms,
+    )
+    active_prices = prices or DEFAULT_MODEL_PRICES
+    overall = Aggregate(group="all")
+    for event in selected:
+        overall.add(event)
+    overall.apply_cost_breakdown(cost_breakdown(selected, active_prices))
+    notes = _report_notes(scope, selected, overall)
+    generated_at = generated_at_ms or int(datetime.now().timestamp() * 1000)
+
+    reports: dict[str, Report] = {}
+    for dimension in dimensions:
+        grouped: dict[str, Aggregate] = {}
+        selected_by_group: dict[str, list[UsageEvent]] = {}
+        for event in selected:
+            group_name = _group_value(event, dimension)
+            grouped.setdefault(group_name, Aggregate(group=group_name)).add(event)
+            selected_by_group.setdefault(group_name, []).append(event)
+        for group_name, aggregate in grouped.items():
+            aggregate.apply_cost_breakdown(
+                cost_breakdown(selected_by_group[group_name], active_prices)
+            )
+        groups = sorted(
+            grouped.values(),
+            key=lambda item: (-item.processed_tokens, item.group.casefold()),
+        )
+        reports[dimension] = Report(
+            scope=scope,
+            dimension=dimension,
+            generated_at_ms=generated_at,
+            overall=overall,
+            groups=groups,
+            filters={
+                "agent": agent,
+                "model": model,
+                "account": account,
+                "start_ms": start_ms,
+                "end_ms": end_ms,
+            },
+            notes=list(notes),
+        )
+    return reports
+
+
+def build_scope_summaries(
+    events: list[UsageEvent],
+    *,
+    scopes: tuple[str, ...] | list[str],
+    prices: Mapping[str, Mapping[str, float]] | None = None,
+) -> dict[str, dict[str, object]]:
+    """Compute one overall aggregate per accounting scope, without grouping."""
+
+    summaries: dict[str, dict[str, object]] = {}
+    for scope in scopes:
+        selected = _select_events(events, scope)
+        active_prices = prices or DEFAULT_MODEL_PRICES
+        overall = Aggregate(group="all")
+        for event in selected:
+            overall.add(event)
+        overall.apply_cost_breakdown(cost_breakdown(selected, active_prices))
+        summaries[scope] = {
+            "overall": overall,
+            "notes": _report_notes(scope, selected, overall),
+        }
+    return summaries
 
 
 def format_yi(tokens: int, *, digits: int = 4) -> str:

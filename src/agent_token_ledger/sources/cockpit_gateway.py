@@ -103,7 +103,6 @@ class CockpitGatewayAdapter(SourceAdapter):
                 source=self.name,
                 event_count=len(rows),
                 error_count=0,
-                hash_limit_bytes=0,
                 metadata={"live_sqlite": True},
             )
         )

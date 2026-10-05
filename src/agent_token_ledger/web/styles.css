@@ -1049,6 +1049,29 @@
     }
     .save-state.saving { background: var(--blue-soft); color: var(--blue); }
     .save-state.error { background: var(--red-soft); color: var(--red); }
+    .app-notice {
+      position: fixed;
+      left: 50%;
+      bottom: 30px;
+      transform: translateX(-50%) translateY(10px);
+      padding: 9px 18px;
+      border-radius: 10px;
+      background: var(--teal-soft);
+      color: var(--teal);
+      font-size: 13px;
+      font-weight: 650;
+      box-shadow: 0 10px 28px rgba(24, 37, 44, 0.2);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.18s ease, transform 0.18s ease;
+      z-index: 60;
+      white-space: nowrap;
+    }
+    .app-notice.visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+    .app-notice.error { background: var(--red-soft); color: var(--red); }
     [data-theme="dark"] .sidebar { background: var(--sidebar-bg); }
     [data-theme="dark"] .workspace .topbar { background: color-mix(in srgb, var(--surface) 94%, transparent); }
     [data-theme="dark"] .button:hover { background: var(--surface-3); }

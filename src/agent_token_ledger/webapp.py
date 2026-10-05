@@ -27,7 +27,13 @@ from .preferences import (
     PreferenceStore,
     merge_preferences,
 )
-from .reporting import Report, render_csv, report
+from .reporting import (
+    Report,
+    build_scope_summaries,
+    render_csv,
+    report,
+    report_dimensions,
+)
 from .sources.base import ScanContext, ScanResult
 from .startup import StartupManager
 from .timeutil import LOCAL_TIMEZONE, iso_from_ms, now_ms
@@ -116,7 +122,6 @@ class LedgerService:
             "last_scan_duration_ms": None,
             "next_scan_ms": None,
             "next_scan_at": "",
-            "reports": {},
             "scopes": {},
             "validation": {},
             "sources": [],
@@ -275,23 +280,22 @@ class LedgerService:
                 scope = "primary"
             period = _resolve_period(events, query, now_ms=now_ms())
 
-        reports: dict[str, dict[str, Any]] = {}
-        current_reports: dict[str, Report] = {}
-        for dimension in DIMENSIONS:
-            value = report(
-                events,
-                scope=scope,
-                dimension=dimension,
-                agent=str(query.get("agent") or ""),
-                model=str(query.get("model") or ""),
-                account=str(query.get("account") or ""),
-                start_ms=period["start_ms"],
-                end_ms=period["end_ms"],
-                generated_at_ms=period["generated_at_ms"],
-                prices=prices,
-            )
-            current_reports[dimension] = value
-            reports[dimension] = value.to_dict()
+        current_reports = report_dimensions(
+            events,
+            scope=scope,
+            dimensions=DIMENSIONS,
+            agent=str(query.get("agent") or ""),
+            model=str(query.get("model") or ""),
+            account=str(query.get("account") or ""),
+            start_ms=period["start_ms"],
+            end_ms=period["end_ms"],
+            generated_at_ms=period["generated_at_ms"],
+            prices=prices,
+        )
+        reports = {
+            dimension: value.to_dict()
+            for dimension, value in current_reports.items()
+        }
 
         previous_overall: dict[str, Any] | None = None
         comparison: dict[str, Any] | None = None
@@ -631,24 +635,13 @@ class LedgerService:
         generated_at_ms: int,
     ) -> dict[str, Any]:
         prices = self.preferences.get("model_prices") or {}
-        reports: dict[str, dict[str, Any]] = {}
-        for scope in SCOPES:
-            reports[scope] = {}
-            for dimension in DIMENSIONS:
-                value = report(
-                    events,
-                    scope=scope,
-                    dimension=dimension,
-                    generated_at_ms=generated_at_ms,
-                    prices=prices,
-                )
-                reports[scope][dimension] = value.to_dict()
+        summaries = build_scope_summaries(events, scopes=SCOPES, prices=prices)
         return {
-            "reports": reports,
             "scopes": {
-                scope: reports[scope]["agent"]["overall"] for scope in SCOPES
+                scope: summaries[scope]["overall"].to_dict()
+                for scope in SCOPES
             },
-            "notes": reports["primary"]["agent"].get("notes", []),
+            "notes": summaries["primary"]["notes"],
         }
 
 
