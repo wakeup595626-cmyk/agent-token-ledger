@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import copy
+import errno
 import http.server
 import json
 import logging
 import os
+import re
 import shutil
 import socket
 import threading
@@ -52,6 +54,7 @@ SEVERITY_ORDER = {"error": 0, "warning": 1, "info": 2}
 BACKUP_FORMAT = "agent-token-ledger-backup"
 BACKUP_SCHEMA_VERSION = 1
 BACKUP_MAX_BYTES = 256 * 1024 * 1024
+PENDING_CLEAR_MARKER = "pending-cache-clear.json"
 
 
 @dataclass(slots=True)
@@ -64,6 +67,110 @@ class ScanPayload:
     snapshots: list[dict[str, Any]]
     work_dir: str = ""
     source_summary: dict[str, int] = field(default_factory=dict)
+    coverage_gaps: list[dict[str, Any]] = field(default_factory=list)
+    model_aliases: dict[str, str] = field(default_factory=dict)
+
+
+_SESSION_DATE_RE = re.compile(r"(20\d{2})[-_]?(0[1-9]|1[0-2])[-_]?([0-2]\d|3[01])")
+_MODEL_ALIASES_CACHE: dict[Path, tuple[int, float, dict[str, str]]] = {}
+
+
+def _codex_session_day(path: Path) -> str:
+    """Return the best-effort date for a Codex session JSONL file."""
+    match = _SESSION_DATE_RE.search(path.name)
+    if match:
+        return f"{match.group(1)}-{match.group(2)}-{match.group(3)}"
+    try:
+        return datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d")
+    except OSError:
+        return ""
+
+
+def codex_session_days(home: Path) -> set[str]:
+    """Collect dates that have at least one Codex session JSONL file."""
+    days: set[str] = set()
+    for directory in (
+        home / ".codex" / "sessions",
+        home / ".codex" / "archived_sessions",
+    ):
+        if not directory.is_dir():
+            continue
+        try:
+            entries = list(directory.iterdir())
+        except OSError:
+            continue
+        for path in entries:
+            if not path.is_file() or path.suffix.lower() != ".jsonl":
+                continue
+            day = _codex_session_day(path)
+            if day:
+                days.add(day)
+    return days
+
+
+def codex_coverage_gaps(
+    home: Path,
+    *,
+    days: int = 7,
+    today: date | None = None,
+) -> list[dict[str, Any]]:
+    """Return dates in the last N days without a Codex session file.
+
+    The current day is excluded because a day that has just started rarely has
+    a complete log yet and would otherwise add noise.
+    """
+    today = today or date.today()
+    present = codex_session_days(home)
+    gaps: list[dict[str, Any]] = []
+    for offset in range(1, days + 1):
+        day = today - timedelta(days=offset)
+        day_text = day.isoformat()
+        if day_text not in present:
+            gaps.append(
+                {
+                    "date": day_text,
+                    "reason": "本机未发现该日期的 Codex 原生日志，无法逐请求回算",
+                }
+            )
+    return gaps
+
+
+def load_model_aliases(home: Path) -> dict[str, str]:
+    """Map internal Codex model slugs to upstream model names.
+
+    The local catalog can be large, so a small cache keyed by size and mtime
+    avoids re-reading it on every scan. Missing or malformed catalogs return
+    an empty mapping rather than failing the scan.
+    """
+    catalog = home / ".codex" / "cockpit-model-catalog.json"
+    try:
+        stat = catalog.stat()
+    except OSError:
+        return {}
+    if not catalog.is_file() or stat.st_size > 64 * 1024 * 1024:
+        return {}
+    cached = _MODEL_ALIASES_CACHE.get(catalog)
+    if cached and cached[0] == stat.st_size and cached[1] == stat.st_mtime:
+        return cached[2]
+    try:
+        data = json.loads(catalog.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    models = data.get("models") if isinstance(data, dict) else None
+    if not isinstance(models, list):
+        return {}
+    aliases: dict[str, str] = {}
+    for item in models:
+        if not isinstance(item, dict):
+            continue
+        slug = str(item.get("slug") or "").strip()
+        upstream = str(
+            item.get("display_name") or item.get("description") or ""
+        ).strip()
+        if slug and upstream and upstream != slug:
+            aliases[slug] = upstream
+    _MODEL_ALIASES_CACHE[catalog] = (stat.st_size, stat.st_mtime, aliases)
+    return aliases
 
 
 class LedgerService:
@@ -133,6 +240,8 @@ class LedgerService:
             "source_runtime": [],
             "issues": [],
             "notes": [],
+            "coverage_gaps": [],
+            "model_aliases": {},
             "last_error": "",
             "work_dir": str(self.work_dir),
             "window_mode": self._window_mode,
@@ -543,22 +652,32 @@ class LedgerService:
     def clear_app_cache(self) -> dict[str, Any]:
         base = self.work_dir.resolve()
         removed: list[str] = []
+        deferred: list[str] = []
         failures: list[str] = []
+
+        # 浏览器缓存目录：当前窗口正在使用的 profile 一定处于被占用状态，
+        # 不做半途删除，直接登记为“下次启动再清理”；未被使用的另一个
+        # profile 可以安全删除。若它仍被外部进程占用，同样转入待清理。
+        active_profile = {
+            "webview": "webview",
+            "edge": "edge-app-profile",
+        }.get(self._window_mode, "")
         for name in ("webview", "edge-app-profile"):
             target = (base / name).resolve()
-            if target.parent != base:
+            if target.parent != base or not target.exists():
+                continue
+            if name == active_profile:
+                deferred.append(name)
                 continue
             try:
-                if target.is_dir():
-                    shutil.rmtree(target)
-                    removed.append(name)
-                elif target.exists():
-                    target.unlink()
-                    removed.append(name)
-            except (PermissionError, OSError) as exc:
-                failures.append(
-                    f"{name}：{type(exc).__name__}: {exc}"
-                )
+                _remove_tree_or_file(target)
+                removed.append(name)
+            except OSError as exc:
+                if _is_file_in_use(exc):
+                    deferred.append(name)
+                else:
+                    failures.append(f"{name}：{type(exc).__name__}: {exc}")
+
         # 运行日志：截断当前日志并删除轮转备份，避免日志只增不减。
         log_names = ["agent-token-ledger.log"]
         log_names.extend(
@@ -581,16 +700,50 @@ class LedgerService:
                 removed.append(name)
             except OSError as exc:
                 failures.append(f"{name}：{type(exc).__name__}: {exc}")
+
+        self._persist_pending_clear(deferred)
+
         if failures:
-            raise OSError(
-                "部分缓存无法清除，请关闭正在使用该缓存的窗口后重试。"
-                + "；".join(failures)
-            )
+            return {
+                "ok": False,
+                "removed": removed,
+                "deferred": deferred,
+                "failures": failures,
+                "removed_count": len(removed),
+                "deferred_count": len(deferred),
+                "failure_count": len(failures),
+                "message": "部分缓存无法清除：" + "；".join(failures),
+                "work_dir": str(base),
+                "kept_parse_cache": True,
+            }
+        if deferred:
+            return {
+                "ok": True,
+                "removed": removed,
+                "deferred": deferred,
+                "failures": [],
+                "removed_count": len(removed),
+                "deferred_count": len(deferred),
+                "failure_count": 0,
+                "message": "浏览器缓存正在使用，将在下次启动时自动清理",
+                "work_dir": str(base),
+                "kept_parse_cache": True,
+            }
         return {
+            "ok": True,
             "removed": removed,
+            "deferred": [],
+            "failures": [],
+            "removed_count": len(removed),
+            "deferred_count": 0,
+            "failure_count": 0,
+            "message": "",
             "work_dir": str(base),
             "kept_parse_cache": True,
         }
+
+    def _persist_pending_clear(self, deferred: list[str]) -> None:
+        _write_pending_clear_marker(self.work_dir, deferred)
 
     def wait_for_idle(self, timeout: float = 10.0) -> bool:
         return self._idle_event.wait(timeout)
@@ -706,6 +859,8 @@ class LedgerService:
 
         source_items = inventory_with_errors(context, source_errors)
         issues.extend(inventory_issues(context, source_errors))
+        coverage_gaps = codex_coverage_gaps(context.home)
+        model_aliases = load_model_aliases(context.home)
         reconciled, reconciled_issues = reconcile(events, issues)
         issue_dicts = [_issue_to_dict(item) for item in reconciled_issues]
         return ScanPayload(
@@ -715,6 +870,8 @@ class LedgerService:
             snapshots=snapshots,
             work_dir=str(context.work_dir),
             source_summary=inventory_summary(source_items),
+            coverage_gaps=coverage_gaps,
+            model_aliases=model_aliases,
         )
 
     def _build_payload_state(
@@ -732,6 +889,28 @@ class LedgerService:
             payload.events,
             generated_at_ms=finished_at_ms,
         )
+        notes = list(report_sections.get("notes") or [])
+        notes.append(
+            "「最近 7 天」按自然日统计（今天起往前共 7 个日历日，不是滚动"
+            " 168 小时）；要与上游或反代面板对比时，请先确认双方时间范围一致，"
+            "累计总量请切换到「全部时间」。"
+        )
+        coverage_gaps = payload.coverage_gaps
+        if coverage_gaps:
+            gap_dates = "、".join(item["date"] for item in coverage_gaps)
+            notes.append(
+                f"近 7 天本机 Codex 原生日志有 {len(coverage_gaps)} 个日期缺失"
+                f"（{gap_dates}），这些日期的用量无法逐请求回算。"
+            )
+        else:
+            notes.append("近 7 天本机 Codex 原生日志覆盖完整。")
+        if payload.model_aliases:
+            notes.append(
+                "模型对照来自本机 Codex 模型目录，未识别为上游模型的内部名称会保留原名显示。"
+            )
+        else:
+            notes.append("本机未发现 Codex 模型目录，内部模型名将保留原名显示。")
+        report_sections["notes"] = notes
         source_runtime = _source_runtime(payload.events)
         sorted_issues = sorted(
             issue_dicts,
@@ -757,6 +936,8 @@ class LedgerService:
             "source_summary": payload.source_summary,
             "snapshots": payload.snapshots,
             "source_runtime": source_runtime,
+            "coverage_gaps": payload.coverage_gaps,
+            "model_aliases": payload.model_aliases,
             "issues": sorted_issues[:100],
             "last_error": "",
             "work_dir": payload.work_dir or str(self.work_dir),
@@ -1226,6 +1407,76 @@ def _probe_service(host: str, port: int) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _is_file_in_use(exc: OSError) -> bool:
+    if getattr(exc, "winerror", None) in (32, 33):
+        return True
+    return getattr(exc, "errno", None) == getattr(errno, "EBUSY", None)
+
+
+def _remove_tree_or_file(target: Path) -> None:
+    if target.is_dir():
+        shutil.rmtree(target)
+    elif target.exists():
+        target.unlink()
+
+
+def _write_pending_clear_marker(work_dir: Path, names: list[str]) -> None:
+    """写入“下次启动时清理”标记；传入空列表表示清除标记。"""
+
+    marker = Path(work_dir) / PENDING_CLEAR_MARKER
+    if not names:
+        marker.unlink(missing_ok=True)
+        return
+    payload = {
+        "names": sorted(set(names)),
+        "created_at_ms": now_ms(),
+    }
+    tmp = marker.with_name(marker.name + ".tmp")
+    tmp.write_text(
+        json.dumps(payload, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    os.replace(tmp, marker)
+
+
+def clear_pending_cache(work_dir: Path) -> list[str]:
+    """启动时消费“下次启动清理”标记，删除上次被运行中窗口占用的缓存目录。"""
+
+    base = Path(work_dir).resolve()
+    marker = base / PENDING_CLEAR_MARKER
+    if not marker.is_file():
+        return []
+    names: list[str] = []
+    try:
+        payload = json.loads(marker.read_text(encoding="utf-8"))
+        if isinstance(payload, dict):
+            names = [str(name) for name in (payload.get("names") or [])]
+    except (OSError, ValueError):
+        logging.warning("读取待清理缓存标记失败，忽略本次清理", exc_info=True)
+        marker.unlink(missing_ok=True)
+        return []
+    cleared: list[str] = []
+    still_pending: list[str] = []
+    for name in ("webview", "edge-app-profile"):
+        if name not in names:
+            continue
+        target = (base / name).resolve()
+        if target.parent != base or not target.exists():
+            continue
+        try:
+            _remove_tree_or_file(target)
+            cleared.append(name)
+        except OSError:
+            still_pending.append(name)
+            logging.warning("启动清理缓存时仍有项目被占用：%s", name, exc_info=True)
+    if still_pending:
+        # 旧实例可能尚未完全退出：保留标记，下次启动继续清理。
+        _write_pending_clear_marker(base, still_pending)
+    else:
+        marker.unlink(missing_ok=True)
+    return cleared
+
+
 def _run_existing_window(url: str, work_dir: Path) -> None:
     from .desktop import open_window
 
@@ -1244,6 +1495,8 @@ def _run_window_application(
     work_dir: Path,
 ) -> int:
     from .desktop import open_window
+
+    clear_pending_cache(work_dir)
 
     server_thread = threading.Thread(
         target=server.serve_forever,

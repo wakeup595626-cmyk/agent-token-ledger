@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-token-ledger"
-version = "1.1.9"
+version = "1.1.10"
 description = "只读统计本机智能体工具 Token 用量的中文桌面应用"
 readme = "README.md"
 license = "MIT"

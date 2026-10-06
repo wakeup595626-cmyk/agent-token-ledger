@@ -76,6 +76,13 @@
           "'": "&#39;",
         })[character],
     );
+  const modelAlias = (name) => {
+    const value = String(name || "");
+    const alias = state?.model_aliases?.[value];
+    if (alias && alias !== value) return `${value}（${alias}）`;
+    if (/^gpt-/.test(value)) return `${value}（${t("quality.modelAliasUnknown")}）`;
+    return value;
+  };
   const integer = (value) =>
     number(value).toLocaleString(locale(), { maximumFractionDigits: 0 });
   const fixed = (value, digits = 2) =>
@@ -558,8 +565,12 @@
   }
 
   function pointFromGroup(group) {
+    const name =
+      currentChartMetric === "model"
+        ? modelAlias(group.group)
+        : group.group || "—";
     return {
-      name: group.group || "—",
+      name,
       value: number(group.processed_tokens),
       events: number(group.events),
       input: number(group.input_tokens_total),
@@ -618,7 +629,7 @@
         t("chart.highest"),
         top ? `${clipLabel(top.name, 18)} · ${tokenValue(top.value)}` : "—",
       ],
-      [t("chart.estimatedCost"), totalCost ? costDisplay({ cost_total_usd: total, cost_status: "estimated" }) : t("cost.missing")],
+      [t("chart.estimatedCost"), totalCost ? costDisplay({ cost_total_usd: totalCost, cost_status: "estimated" }) : t("cost.missing")],
     ]);
     if (!currentChartPoints.length) {
       svg.replaceChildren();
@@ -974,8 +985,12 @@
       const row = document.createElement("tr");
       const share = total > 0 ? (number(group.processed_tokens) / total) * 100 : 0;
       const status = costStatus(group);
+      const groupName =
+        currentDimension === "model"
+          ? modelAlias(group.group)
+          : group.group || "—";
       row.innerHTML = `
-        <td class="group-name" title="${escapeHtml(group.group)}">${escapeHtml(group.group || "—")}</td>
+        <td class="group-name" title="${escapeHtml(group.group)}">${escapeHtml(groupName)}</td>
         <td class="num">${escapeHtml(tokenValue(group.processed_tokens))}</td>
         <td class="num">${escapeHtml(tokenValue(group.input_tokens_total))}</td>
         <td class="num">${escapeHtml(tokenValue(group.output_tokens))}</td>
@@ -1101,9 +1116,55 @@
     const container = byId("notes");
     if (!container) return;
     const notes = currentReport?.notes || state?.notes || [];
-    container.innerHTML = notes.length
-      ? notes.map((note) => `<p>${escapeHtml(note)}</p>`).join("")
-      : `<p>${escapeHtml(t("quality.waitingNotes"))}</p>`;
+    const parts = notes.length
+      ? notes.map((note) => `<p>${escapeHtml(note)}</p>`)
+      : [`<p>${escapeHtml(t("quality.waitingNotes"))}</p>`];
+
+    const ready = state?.status === "ready" && Boolean(currentReport);
+    if (!ready) {
+      container.innerHTML = parts.join("");
+      return;
+    }
+
+    const gaps = state?.coverage_gaps || [];
+    const gapTitle = escapeHtml(t("quality.coverageGapsTitle"));
+    const gapDesc = escapeHtml(t("quality.coverageGapsDesc"));
+    if (gaps.length) {
+      const items = gaps
+        .map(
+          (gap) =>
+            `<li>${escapeHtml(gap.date)}：${escapeHtml(
+              gap.reason || t("quality.coverageGapsDesc"),
+            )}</li>`,
+        )
+        .join("");
+      parts.push(
+        `<h4>${gapTitle}</h4><p>${gapDesc}</p><ul class="notes-list">${items}</ul>`,
+      );
+    } else {
+      parts.push(
+        `<h4>${gapTitle}</h4><p>${escapeHtml(t("quality.coverageGapsNone"))}</p>`,
+      );
+    }
+
+    const aliases = state?.model_aliases || {};
+    const aliasTitle = escapeHtml(t("quality.modelAliasesTitle"));
+    const aliasDesc = escapeHtml(t("quality.modelAliasesDesc"));
+    const aliasEntries = Object.entries(aliases);
+    if (aliasEntries.length) {
+      const items = aliasEntries
+        .map(([slug, upstream]) => `<li>${escapeHtml(slug)} → ${escapeHtml(upstream)}</li>`)
+        .join("");
+      parts.push(
+        `<h4>${aliasTitle}</h4><p>${aliasDesc}</p><ul class="notes-list">${items}</ul>`,
+      );
+    } else {
+      parts.push(
+        `<h4>${aliasTitle}</h4><p>${escapeHtml(t("quality.modelAliasesNone"))}</p>`,
+      );
+    }
+
+    container.innerHTML = parts.join("");
   }
 
   function renderSettings() {
@@ -1769,7 +1830,15 @@
         render();
         const result = next?.action_result || {};
         if (result.ok) {
-          showNotice(t("settings.clearCacheDone"));
+          if (Number(result.deferred_count || 0) > 0) {
+            showNotice(
+              t("settings.clearCacheDeferred", {
+                count: result.deferred_count,
+              }),
+            );
+          } else {
+            showNotice(t("settings.clearCacheDone"));
+          }
         } else {
           showNotice(result.message || t("settings.clearCacheFailed"), "error");
         }

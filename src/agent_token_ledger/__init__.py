@@ -1,3 +1,3 @@
 """Local, read-only Agent token usage accounting."""
 
-__version__ = "1.1.9"
+__version__ = "1.1.10"

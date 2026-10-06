@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import tempfile
 import threading
 import time
 import unittest
 import urllib.error
 import urllib.request
+from datetime import date
 from pathlib import Path
 from unittest import mock
 
@@ -17,10 +19,15 @@ from agent_token_ledger.webapp import (
     APP_VERSION,
     DASHBOARD_HTML,
     LedgerService,
+    PENDING_CLEAR_MARKER,
     ScanPayload,
     WEB_DIR,
     _portable_event_dict,
+    clear_pending_cache,
+    codex_coverage_gaps,
+    codex_session_days,
     create_server,
+    load_model_aliases,
 )
 
 
@@ -121,6 +128,124 @@ class WebappTests(unittest.TestCase):
             self.assertFalse((base / "agent-token-ledger.log.1").exists())
             self.assertTrue((base / "codex_native_cache_v1.json").exists())
             self.assertTrue((base / "settings.json").exists())
+
+    def test_clear_app_cache_defers_locked_browser_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            (base / "webview").mkdir()
+            (base / "edge-app-profile").mkdir()
+            (base / "agent-token-ledger.log").write_text(
+                "old log", encoding="utf-8"
+            )
+
+            real_rmtree = shutil.rmtree
+
+            def locked_rmtree(path, *args, **kwargs):
+                if Path(path).name == "webview":
+                    raise PermissionError(
+                        13,
+                        "另一个程序正在使用此文件，进程无法访问。",
+                        str(path),
+                        32,
+                    )
+                return real_rmtree(path, *args, **kwargs)
+
+            service = LedgerService(
+                work_dir=base,
+                refresh_seconds=30,
+                scanner=lambda: _payload(),
+            )
+            with mock.patch(
+                "agent_token_ledger.webapp.shutil.rmtree",
+                side_effect=locked_rmtree,
+            ):
+                result = service.clear_app_cache()
+
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["deferred"], ["webview"])
+            self.assertEqual(result["deferred_count"], 1)
+            self.assertIn("edge-app-profile", result["removed"])
+            self.assertIn("agent-token-ledger.log", result["removed"])
+            self.assertTrue((base / "webview").exists())
+            self.assertFalse((base / "edge-app-profile").exists())
+            self.assertTrue((base / PENDING_CLEAR_MARKER).is_file())
+
+            cleared = clear_pending_cache(base)
+            self.assertEqual(cleared, ["webview"])
+            self.assertFalse((base / "webview").exists())
+            self.assertFalse((base / PENDING_CLEAR_MARKER).exists())
+
+    def test_clear_app_cache_skips_active_window_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            (base / "webview").mkdir()
+            (base / "webview" / "lock.log").write_text("in use", encoding="utf-8")
+            (base / "edge-app-profile").mkdir()
+            (base / "agent-token-ledger.log").write_text(
+                "old log", encoding="utf-8"
+            )
+
+            real_rmtree = shutil.rmtree
+
+            def guarded_rmtree(path, *args, **kwargs):
+                if Path(path).name == "webview":
+                    raise AssertionError("运行中的窗口 profile 不应被删除")
+                return real_rmtree(path, *args, **kwargs)
+
+            service = LedgerService(
+                work_dir=base,
+                refresh_seconds=30,
+                scanner=lambda: _payload(),
+            )
+            service.set_window_mode("webview")
+            with mock.patch(
+                "agent_token_ledger.webapp.shutil.rmtree",
+                side_effect=guarded_rmtree,
+            ):
+                result = service.clear_app_cache()
+
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["deferred"], ["webview"])
+            self.assertEqual(result["deferred_count"], 1)
+            self.assertIn("edge-app-profile", result["removed"])
+            self.assertIn("agent-token-ledger.log", result["removed"])
+            self.assertTrue((base / "webview" / "lock.log").exists())
+            self.assertFalse((base / "edge-app-profile").exists())
+            self.assertTrue((base / PENDING_CLEAR_MARKER).is_file())
+
+            self.assertEqual(clear_pending_cache(base), ["webview"])
+            self.assertFalse((base / "webview").exists())
+            self.assertFalse((base / PENDING_CLEAR_MARKER).exists())
+
+    def test_clear_pending_cache_keeps_marker_when_still_locked(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            (base / "webview").mkdir()
+            (base / PENDING_CLEAR_MARKER).write_text(
+                json.dumps({"names": ["webview"], "created_at_ms": 0}),
+                encoding="utf-8",
+            )
+
+            def locked_rmtree(path, *args, **kwargs):
+                raise PermissionError(
+                    13,
+                    "另一个程序正在使用此文件，进程无法访问。",
+                    str(path),
+                    32,
+                )
+
+            with mock.patch(
+                "agent_token_ledger.webapp.shutil.rmtree",
+                side_effect=locked_rmtree,
+            ):
+                self.assertEqual(clear_pending_cache(base), [])
+
+            self.assertTrue((base / "webview").exists())
+            self.assertTrue((base / PENDING_CLEAR_MARKER).is_file())
+
+            self.assertEqual(clear_pending_cache(base), ["webview"])
+            self.assertFalse((base / "webview").exists())
+            self.assertFalse((base / PENDING_CLEAR_MARKER).exists())
 
     def test_preferences_are_validated_and_persisted(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -585,6 +710,75 @@ class WebappTests(unittest.TestCase):
                 server.shutdown()
                 server.server_close()
                 service.stop()
+
+    def test_codex_coverage_gaps_marks_dates_without_session_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            sessions = home / ".codex" / "sessions"
+            archived = home / ".codex" / "archived_sessions"
+            sessions.mkdir(parents=True)
+            archived.mkdir(parents=True)
+            (sessions / "2026-09-30.jsonl").write_text("{}", encoding="utf-8")
+            (archived / "2026-10-01-session.jsonl").write_text("{}", encoding="utf-8")
+
+            days = codex_session_days(home)
+            self.assertIn("2026-09-30", days)
+            self.assertIn("2026-10-01", days)
+
+            gaps = codex_coverage_gaps(home, days=7, today=date(2026, 10, 6))
+            gap_dates = {item["date"] for item in gaps}
+            self.assertIn("2026-10-02", gap_dates)
+            self.assertNotIn("2026-10-06", gap_dates)
+            self.assertEqual(
+                gaps[0]["reason"],
+                "本机未发现该日期的 Codex 原生日志，无法逐请求回算",
+            )
+
+    def test_codex_coverage_gaps_uses_mtime_fallback_for_unnamed_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            sessions = home / ".codex" / "sessions"
+            sessions.mkdir(parents=True)
+            path = sessions / "session.jsonl"
+            path.write_text("{}", encoding="utf-8")
+            expected = date.fromtimestamp(path.stat().st_mtime).isoformat()
+            self.assertIn(expected, codex_session_days(home))
+
+    def test_load_model_aliases_maps_internal_slugs_to_upstream(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            (home / ".codex").mkdir(parents=True)
+            catalog = home / ".codex" / "cockpit-model-catalog.json"
+            catalog.write_text(
+                json.dumps(
+                    {
+                        "models": [
+                            {"slug": "gpt-5.6-sol", "display_name": "cn:deepseek-v4-pro"},
+                            {"slug": "cn:deepseek-v4-pro", "display_name": "cn:deepseek-v4-pro"},
+                            {"slug": "codex-auto-review", "display_name": "Codex Auto Review"},
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            aliases = load_model_aliases(home)
+            self.assertEqual(aliases["gpt-5.6-sol"], "cn:deepseek-v4-pro")
+            self.assertNotIn("cn:deepseek-v4-pro", aliases)
+            self.assertEqual(aliases["codex-auto-review"], "Codex Auto Review")
+
+    def test_state_exposes_coverage_gaps_and_model_aliases(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            service = LedgerService(
+                work_dir=Path(temp),
+                refresh_seconds=30,
+                scanner=lambda: _payload(),
+            )
+            self.assertTrue(service.scan_once())
+            state = service.snapshot()
+            self.assertIn("coverage_gaps", state)
+            self.assertIn("model_aliases", state)
+            self.assertEqual(state["coverage_gaps"], [])
+            self.assertEqual(state["model_aliases"], {})
 
 
 def _payload() -> ScanPayload:
