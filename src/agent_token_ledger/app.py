@@ -176,6 +176,7 @@ def _local_appdata_data_dir() -> Path | None:
 #: 从旧 LocalAppData 目录迁移到新数据目录时，需要保留的运行期文件。
 _MIGRATABLE_FILES = (
     "settings.json",
+    "cost_anchor_v1.json",
     "codex_native_cache_v1.json",
     "dsh_native_cache_v1.json",
 )

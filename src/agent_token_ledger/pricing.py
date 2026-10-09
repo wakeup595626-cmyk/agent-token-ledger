@@ -10,10 +10,18 @@ Rate lookup order for a token event without a collected cost:
 
 1. the implied blended rate of the same model (derived from its own costed
    events), which self-calibrates to whatever the user actually pays;
-2. an explicit per-model price entry in the editable table stored in
+2. the persisted per-model rate of the cost anchor file, which remembers what
+   real cost data taught earlier snapshots;
+3. an explicit per-model price entry in the editable table stored in
    ``settings.json``;
-3. the implied blended rate of the whole snapshot;
-4. the ``"*"`` fallback entry of the price table.
+4. the implied blended rate of the whole snapshot;
+5. the persisted global rate of the cost anchor;
+6. the ``"*"`` fallback entry of the price table.
+
+The anchor exists because a snapshot can lose every costed event - for example
+when the single source that collected real charges is uninstalled or its data
+is removed. Without it, every remaining event would silently fall back to the
+low placeholder prices and the reference total would collapse.
 
 This guarantees a reference amount whenever tokens exist, which is what the
 dashboard shows as the ``estimated supplement`` and ``reference total``.
@@ -21,7 +29,10 @@ dashboard shows as the ``estimated supplement`` and ``reference total``.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
+import shutil
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from .model import UsageEvent
@@ -29,6 +40,10 @@ from .model import UsageEvent
 MILLION = 1_000_000.0
 PRICE_FIELDS = ("input", "cached_input", "output")
 FALLBACK_MODEL_KEY = "*"
+COST_ANCHOR_FORMAT = "agent-token-ledger-cost-anchor"
+COST_ANCHOR_SCHEMA_VERSION = 1
+COST_ANCHOR_FILE_NAME = "cost_anchor_v1.json"
+COST_ANCHOR_MAX_MODELS = 200
 
 # USD per one million tokens. Values are deliberately moderate reference
 # figures, not a claim about any specific contract price. Users can edit them
@@ -116,6 +131,220 @@ class CostBreakdown:
         }
 
 
+@dataclass(slots=True)
+class CostAnchor:
+    """Persisted implied rates learned from events that carried a real cost.
+
+    The anchor is written to cost_anchor_v1.json in the data directory and is
+    only consulted when the current snapshot has no costed evidence for an
+    event. It lets the reference total survive a source whose data disappears.
+    """
+
+    global_rate_usd_per_million: float = 0.0
+    model_rates_usd_per_million: dict[str, float] = field(default_factory=dict)
+    costed_events: int = 0
+    costed_tokens: int = 0
+    known_usd: float = 0.0
+    updated_at_ms: int = 0
+
+    @property
+    def usable(self) -> bool:
+        return self.global_rate_usd_per_million > 0 or any(
+            rate > 0 for rate in self.model_rates_usd_per_million.values()
+        )
+
+    def model_rate(self, model: str) -> float:
+        """Return the learned blended rate (USD per million tokens) or 0."""
+
+        return _anchor_model_rate(self.model_rates_usd_per_million, model)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "format": COST_ANCHOR_FORMAT,
+            "schema_version": COST_ANCHOR_SCHEMA_VERSION,
+            "updated_at_ms": int(self.updated_at_ms),
+            "global_rate_usd_per_million": round(
+                self.global_rate_usd_per_million, 9
+            ),
+            "model_rates_usd_per_million": {
+                name: round(rate, 9)
+                for name, rate in sorted(self.model_rates_usd_per_million.items())
+                if rate > 0
+            },
+            "costed_events": int(self.costed_events),
+            "costed_tokens": int(self.costed_tokens),
+            "known_usd": round(self.known_usd, 8),
+        }
+
+    @classmethod
+    def from_dict(cls, value: Any) -> "CostAnchor | None":
+        if not isinstance(value, Mapping):
+            return None
+        declared_format = str(value.get("format") or "").strip()
+        if declared_format and declared_format != COST_ANCHOR_FORMAT:
+            return None
+        try:
+            schema_version = int(value.get("schema_version") or 0)
+        except (TypeError, ValueError):
+            return None
+        if schema_version > COST_ANCHOR_SCHEMA_VERSION:
+            return None
+        raw_models = value.get("model_rates_usd_per_million")
+        model_rates: dict[str, float] = {}
+        if isinstance(raw_models, Mapping):
+            for raw_name, raw_rate in raw_models.items():
+                name = str(raw_name or "").strip()
+                if not name or len(name) > 120:
+                    continue
+                rate = _bounded_price(raw_rate)
+                if rate <= 0:
+                    continue
+                model_rates[name.casefold()] = rate
+                if len(model_rates) >= COST_ANCHOR_MAX_MODELS:
+                    break
+        anchor = cls(
+            global_rate_usd_per_million=_bounded_price(
+                value.get("global_rate_usd_per_million")
+            ),
+            model_rates_usd_per_million=model_rates,
+            costed_events=_non_negative_int(value.get("costed_events")),
+            costed_tokens=_non_negative_int(value.get("costed_tokens")),
+            known_usd=_bounded_price(value.get("known_usd")),
+            updated_at_ms=_non_negative_int(value.get("updated_at_ms")),
+        )
+        return anchor if anchor.usable else None
+
+
+def derive_cost_anchor(
+    events: Iterable[UsageEvent],
+    *,
+    updated_at_ms: int = 0,
+) -> CostAnchor | None:
+    """Learn implied rates from events that already carry a real cost.
+
+    Returns None when the snapshot holds no usable costed evidence, so a
+    snapshot that never had real prices can not fabricate an anchor.
+    """
+
+    costed_events = 0
+    known_usd = 0.0
+    rate_cost = 0.0
+    rate_tokens = 0
+    model_totals: dict[str, list[float]] = {}
+    for event in events:
+        if event.cost_usd is None:
+            continue
+        costed_events += 1
+        known_usd += event.cost_usd
+        if event.processed_tokens <= 0 or event.cost_usd <= 0:
+            continue
+        rate_cost += event.cost_usd
+        rate_tokens += event.processed_tokens
+        name = str(event.model or "").strip().casefold()
+        if name:
+            bucket = model_totals.setdefault(name, [0.0, 0])
+            bucket[0] += event.cost_usd
+            bucket[1] += event.processed_tokens
+    if costed_events <= 0 or rate_tokens <= 0 or rate_cost <= 0:
+        return None
+    model_rates: dict[str, float] = {}
+    for name, (cost, tokens) in sorted(model_totals.items()):
+        if tokens <= 0 or cost <= 0:
+            continue
+        rate = _bounded_price(cost / tokens * MILLION)
+        if rate > 0:
+            model_rates[name] = rate
+        if len(model_rates) >= COST_ANCHOR_MAX_MODELS:
+            break
+    anchor = CostAnchor(
+        global_rate_usd_per_million=_bounded_price(
+            rate_cost / rate_tokens * MILLION
+        ),
+        model_rates_usd_per_million=model_rates,
+        costed_events=costed_events,
+        costed_tokens=rate_tokens,
+        known_usd=known_usd,
+        updated_at_ms=_non_negative_int(updated_at_ms),
+    )
+    return anchor if anchor.usable else None
+
+
+def merge_cost_anchors(
+    base: CostAnchor | None,
+    learned: CostAnchor | None,
+) -> CostAnchor | None:
+    """Keep the newest evidence: global rate replaced, model rates merged."""
+
+    if learned is None or not learned.usable:
+        return base
+    if base is None or not base.usable:
+        return learned
+    model_rates = dict(base.model_rates_usd_per_million)
+    model_rates.update(learned.model_rates_usd_per_million)
+    if len(model_rates) > COST_ANCHOR_MAX_MODELS:
+        newest = set(learned.model_rates_usd_per_million)
+        ordered = sorted(
+            model_rates.items(),
+            key=lambda item: (item[0] not in newest, item[0]),
+        )
+        model_rates = dict(ordered[:COST_ANCHOR_MAX_MODELS])
+    return CostAnchor(
+        global_rate_usd_per_million=(
+            learned.global_rate_usd_per_million
+            or base.global_rate_usd_per_million
+        ),
+        model_rates_usd_per_million=model_rates,
+        costed_events=learned.costed_events,
+        costed_tokens=learned.costed_tokens,
+        known_usd=learned.known_usd,
+        updated_at_ms=learned.updated_at_ms or base.updated_at_ms,
+    )
+
+
+def load_cost_anchor(path: str | Path) -> CostAnchor | None:
+    """Read the persisted anchor; missing, broken or empty files return None."""
+
+    try:
+        raw = Path(path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    try:
+        value = json.loads(raw)
+    except ValueError:
+        return None
+    try:
+        return CostAnchor.from_dict(value)
+    except Exception:  # A broken anchor must never break the dashboard.
+        return None
+
+
+def save_cost_anchor(path: str | Path, anchor: CostAnchor | None) -> bool:
+    """Atomically persist the anchor; returns False instead of raising."""
+
+    if anchor is None or not anchor.usable:
+        return False
+    target = Path(path)
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_suffix(target.suffix + ".tmp")
+        temporary.write_text(
+            json.dumps(anchor.to_dict(), ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        try:
+            temporary.replace(target)
+        except OSError as exc:
+            # EFS-encrypted directories can reject os.replace with WinError 17
+            # even when the temporary and target files are in the same folder.
+            if getattr(exc, "winerror", None) != 17:
+                raise
+            shutil.copyfile(temporary, target)
+            temporary.unlink(missing_ok=True)
+        return True
+    except OSError:
+        return False
+
+
 def normalize_model_prices(value: Any) -> dict[str, dict[str, float]]:
     """Validate a persisted price table and merge it over the defaults."""
 
@@ -186,11 +415,19 @@ def estimate_event_cost_usd(
     prices: Mapping[str, Mapping[str, float]],
     *,
     fallback_rate: float = 0.0,
+    anchor: CostAnchor | None = None,
 ) -> tuple[float, str]:
     """Return ``(usd, source)`` for one event that has no collected cost."""
 
     if event.processed_tokens <= 0:
         return 0.0, "empty"
+    if anchor is not None:
+        anchor_rate = anchor.model_rate(event.model)
+        if anchor_rate > 0:
+            return (
+                event.processed_tokens * anchor_rate / MILLION,
+                "anchor_model",
+            )
     price = resolve_price(event.model, prices, include_fallback=False)
     if price is not None:
         value = price.cost_usd(
@@ -203,6 +440,13 @@ def estimate_event_cost_usd(
             return value, "table"
     if fallback_rate > 0:
         return event.processed_tokens * fallback_rate, "implied"
+    if anchor is not None and anchor.global_rate_usd_per_million > 0:
+        return (
+            event.processed_tokens
+            * anchor.global_rate_usd_per_million
+            / MILLION,
+            "anchor_global",
+        )
     fallback_price = resolve_price(event.model, prices)
     if fallback_price is not None:
         value = fallback_price.cost_usd(
@@ -219,20 +463,29 @@ def estimate_event_cost_usd(
 def cost_breakdown(
     events: Iterable[UsageEvent],
     prices: Mapping[str, Mapping[str, float]],
+    *,
+    anchor: CostAnchor | None = None,
+    baseline: Iterable[UsageEvent] | None = None,
 ) -> CostBreakdown:
-    """Split known and estimated cost for a set of events."""
+    """Split known and estimated cost for a set of events.
+
+    ``baseline`` is the evidence universe the implied rates are learned from.
+    It defaults to ``events`` itself, which is right for a whole report. A
+    caller that splits one set into several groups (the dashboard chart) must
+    pass the same baseline to every group, otherwise each group would price
+    itself with its own evidence and the parts would not add up to the whole.
+    """
 
     items = list(events)
     breakdown = CostBreakdown(events=len(items))
+    evidence = items if baseline is None else list(baseline)
 
     model_totals: dict[str, list[float]] = {}
     total_cost = 0.0
     total_tokens = 0
-    for event in items:
+    for event in evidence:
         if event.cost_usd is None:
             continue
-        breakdown.costed_events += 1
-        breakdown.known_usd += event.cost_usd
         total_cost += event.cost_usd
         total_tokens += event.processed_tokens
         if event.processed_tokens > 0:
@@ -249,6 +502,8 @@ def cost_breakdown(
 
     for event in items:
         if event.cost_usd is not None:
+            breakdown.costed_events += 1
+            breakdown.known_usd += event.cost_usd
             continue
         if event.processed_tokens <= 0:
             breakdown.unpriced_events += 1
@@ -263,12 +518,16 @@ def cost_breakdown(
             event,
             prices,
             fallback_rate=global_rate,
+            anchor=anchor,
         )
         if source == "unpriced" or value <= 0:
             breakdown.unpriced_events += 1
             continue
         breakdown.estimated_usd += value
         breakdown.estimated_events += 1
+        if source == "anchor_model":
+            # The persisted per-model rate is an implied model rate as well.
+            breakdown.implicit_model_events += 1
 
     return breakdown
 
@@ -298,6 +557,34 @@ def _as_price(value: Any) -> ModelPrice | None:
         return None
 
 
+def _anchor_model_rate(rates: Mapping[str, float], model: str) -> float:
+    """Look up a learned blended rate with the same matching as prices."""
+
+    name = str(model or "").strip().casefold()
+    if not name:
+        return 0.0
+    direct = rates.get(name)
+    if direct is not None and direct > 0:
+        return float(direct)
+    best: tuple[int, float] | None = None
+    for key, value in rates.items():
+        candidate = str(key).strip().casefold()
+        if len(candidate) < 3 or value <= 0:
+            continue
+        if candidate in name or name in candidate:
+            if best is None or len(candidate) > best[0]:
+                best = (len(candidate), float(value))
+    return best[1] if best is not None else 0.0
+
+
+def _non_negative_int(value: Any) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, parsed)
+
+
 def _bounded_price(value: Any) -> float:
     try:
         parsed = float(value)
@@ -309,12 +596,20 @@ def _bounded_price(value: Any) -> float:
 
 
 __all__ = [
+    "COST_ANCHOR_FILE_NAME",
+    "COST_ANCHOR_FORMAT",
+    "COST_ANCHOR_SCHEMA_VERSION",
     "DEFAULT_MODEL_PRICES",
     "FALLBACK_MODEL_KEY",
+    "CostAnchor",
     "CostBreakdown",
     "ModelPrice",
     "cost_breakdown",
+    "derive_cost_anchor",
     "estimate_event_cost_usd",
+    "load_cost_anchor",
+    "merge_cost_anchors",
     "normalize_model_prices",
     "resolve_price",
+    "save_cost_anchor",
 ]

@@ -7,7 +7,12 @@ from datetime import datetime
 from typing import Any, Mapping
 
 from .model import SourceKind, UsageEvent
-from .pricing import DEFAULT_MODEL_PRICES, CostBreakdown, cost_breakdown
+from .pricing import (
+    DEFAULT_MODEL_PRICES,
+    CostAnchor,
+    CostBreakdown,
+    cost_breakdown,
+)
 from .timeutil import day_from_ms, iso_from_ms
 
 
@@ -240,6 +245,7 @@ def report(
     end_ms: int | None = None,
     generated_at_ms: int | None = None,
     prices: Mapping[str, Mapping[str, float]] | None = None,
+    anchor: CostAnchor | None = None,
 ) -> Report:
     if dimension not in {"agent", "source", "model", "account", "date", "kind"}:
         raise ValueError(f"不支持的分组维度：{dimension}")
@@ -263,10 +269,17 @@ def report(
         grouped.setdefault(group_name, Aggregate(group=group_name)).add(event)
         selected_by_group.setdefault(group_name, []).append(event)
     active_prices = prices or DEFAULT_MODEL_PRICES
-    overall.apply_cost_breakdown(cost_breakdown(selected, active_prices))
+    overall.apply_cost_breakdown(
+        cost_breakdown(selected, active_prices, anchor=anchor)
+    )
     for group_name, aggregate in grouped.items():
         aggregate.apply_cost_breakdown(
-            cost_breakdown(selected_by_group[group_name], active_prices)
+            cost_breakdown(
+                selected_by_group[group_name],
+                active_prices,
+                anchor=anchor,
+                baseline=selected,
+            )
         )
     groups = sorted(
         grouped.values(),
@@ -301,6 +314,7 @@ def report_dimensions(
     end_ms: int | None = None,
     generated_at_ms: int | None = None,
     prices: Mapping[str, Mapping[str, float]] | None = None,
+    anchor: CostAnchor | None = None,
 ) -> dict[str, Report]:
     """Build all dimension reports for one scope, filtering only once.
 
@@ -328,7 +342,9 @@ def report_dimensions(
     overall = Aggregate(group="all")
     for event in selected:
         overall.add(event)
-    overall.apply_cost_breakdown(cost_breakdown(selected, active_prices))
+    overall.apply_cost_breakdown(
+        cost_breakdown(selected, active_prices, anchor=anchor)
+    )
     notes = _report_notes(scope, selected, overall)
     generated_at = generated_at_ms or int(datetime.now().timestamp() * 1000)
 
@@ -342,7 +358,12 @@ def report_dimensions(
             selected_by_group.setdefault(group_name, []).append(event)
         for group_name, aggregate in grouped.items():
             aggregate.apply_cost_breakdown(
-                cost_breakdown(selected_by_group[group_name], active_prices)
+                cost_breakdown(
+                    selected_by_group[group_name],
+                    active_prices,
+                    anchor=anchor,
+                    baseline=selected,
+                )
             )
         groups = sorted(
             grouped.values(),
@@ -371,6 +392,7 @@ def build_scope_summaries(
     *,
     scopes: tuple[str, ...] | list[str],
     prices: Mapping[str, Mapping[str, float]] | None = None,
+    anchor: CostAnchor | None = None,
 ) -> dict[str, dict[str, object]]:
     """Compute one overall aggregate per accounting scope, without grouping."""
 
@@ -381,7 +403,9 @@ def build_scope_summaries(
         overall = Aggregate(group="all")
         for event in selected:
             overall.add(event)
-        overall.apply_cost_breakdown(cost_breakdown(selected, active_prices))
+        overall.apply_cost_breakdown(
+            cost_breakdown(selected, active_prices, anchor=anchor)
+        )
         summaries[scope] = {
             "overall": overall,
             "notes": _report_notes(scope, selected, overall),

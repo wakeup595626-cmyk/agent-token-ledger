@@ -29,6 +29,14 @@ from .preferences import (
     PreferenceStore,
     merge_preferences,
 )
+from .pricing import (
+    COST_ANCHOR_FILE_NAME,
+    CostAnchor,
+    derive_cost_anchor,
+    load_cost_anchor,
+    merge_cost_anchors,
+    save_cost_anchor,
+)
 from .reporting import (
     Report,
     build_scope_summaries,
@@ -188,6 +196,8 @@ class LedgerService:
         self.work_dir = Path(work_dir)
         self._preference_store = PreferenceStore(self.work_dir / "settings.json")
         self.preferences = self._preference_store.load()
+        self._cost_anchor_path = self.work_dir / COST_ANCHOR_FILE_NAME
+        self._cost_anchor = load_cost_anchor(self._cost_anchor_path)
         preferred_refresh = (
             int(self.preferences["refresh_seconds"])
             if self._preference_store.exists
@@ -223,6 +233,7 @@ class LedgerService:
             "scan_id": 0,
             "refresh_seconds": self.refresh_seconds,
             "preferences": dict(self.preferences),
+            "cost_anchor": self._anchor_state(),
             "started_at_ms": self._started_at_ms,
             "started_at": iso_from_ms(self._started_at_ms),
             "last_scan_started_at_ms": None,
@@ -387,6 +398,7 @@ class LedgerService:
             prices = copy.deepcopy(
                 self.preferences.get("model_prices") or {}
             )
+            anchor = self._cost_anchor
             scope = str(query.get("scope") or "primary").strip().lower()
             if scope not in SCOPES:
                 scope = "primary"
@@ -403,6 +415,7 @@ class LedgerService:
             end_ms=period["end_ms"],
             generated_at_ms=period["generated_at_ms"],
             prices=prices,
+            anchor=anchor,
         )
         reports = {
             dimension: value.to_dict()
@@ -423,6 +436,7 @@ class LedgerService:
                 end_ms=period["previous_end_ms"],
                 generated_at_ms=period["generated_at_ms"],
                 prices=prices,
+                anchor=anchor,
             )
             previous_overall = previous_report.overall.to_dict()
             comparison = _comparison_dict(
@@ -430,6 +444,10 @@ class LedgerService:
                 previous_overall,
             )
 
+        notes = list(reports["agent"].get("notes", []))
+        anchor_note = self._anchor_note_for(events)
+        if anchor_note:
+            notes.append(anchor_note)
         return {
             "scope": scope,
             "range": period["range"],
@@ -453,7 +471,7 @@ class LedgerService:
             "reports": reports,
             "previous_overall": previous_overall,
             "comparison": comparison,
-            "notes": reports["agent"].get("notes", []),
+            "notes": notes,
         }
 
     def export_report(
@@ -473,6 +491,7 @@ class LedgerService:
             prices = copy.deepcopy(
                 self.preferences.get("model_prices") or {}
             )
+            anchor = self._cost_anchor
         period = _resolve_period(events, query, now_ms=now_ms())
         value = report(
             events,
@@ -485,6 +504,7 @@ class LedgerService:
             end_ms=period["end_ms"],
             generated_at_ms=period["generated_at_ms"],
             prices=prices,
+            anchor=anchor,
         )
         if format_name == "json":
             body = json.dumps(
@@ -589,6 +609,7 @@ class LedgerService:
         """根据当前内存事件重算报告与校验结果，供导入后刷新界面使用。"""
 
         generated_at_ms = now_ms()
+        self._learn_cost_anchor(self._events)
         report_sections = self._build_report_sections(
             self._events,
             generated_at_ms=generated_at_ms,
@@ -600,6 +621,7 @@ class LedgerService:
         self._state.update(
             {
                 **report_sections,
+                "cost_anchor": self._anchor_state(),
                 "validation": validation,
                 "source_runtime": _source_runtime(self._events),
             }
@@ -628,6 +650,7 @@ class LedgerService:
                     "last_scan_finished_at", ""
                 ),
                 "events": len(self._events),
+                "cost_anchor": self._anchor_state(),
                 "source_summary": copy.deepcopy(
                     self._state.get("source_summary", {})
                 ),
@@ -885,11 +908,15 @@ class LedgerService:
         validation = validate_snapshot(payload.events, issue_dicts)
         self._events = list(payload.events)
         self._last_payload = payload
+        self._learn_cost_anchor(payload.events)
         report_sections = self._build_report_sections(
             payload.events,
             generated_at_ms=finished_at_ms,
         )
         notes = list(report_sections.get("notes") or [])
+        anchor_note = self._anchor_note_for(payload.events)
+        if anchor_note:
+            notes.append(anchor_note)
         notes.append(
             "「最近 7 天」按自然日统计（今天起往前共 7 个日历日，不是滚动"
             " 168 小时）；要与上游或反代面板对比时，请先确认双方时间范围一致，"
@@ -936,6 +963,7 @@ class LedgerService:
             "source_summary": payload.source_summary,
             "snapshots": payload.snapshots,
             "source_runtime": source_runtime,
+            "cost_anchor": self._anchor_state(),
             "coverage_gaps": payload.coverage_gaps,
             "model_aliases": payload.model_aliases,
             "issues": sorted_issues[:100],
@@ -951,7 +979,12 @@ class LedgerService:
         generated_at_ms: int,
     ) -> dict[str, Any]:
         prices = self.preferences.get("model_prices") or {}
-        summaries = build_scope_summaries(events, scopes=SCOPES, prices=prices)
+        summaries = build_scope_summaries(
+            events,
+            scopes=SCOPES,
+            prices=prices,
+            anchor=self._cost_anchor,
+        )
         return {
             "scopes": {
                 scope: summaries[scope]["overall"].to_dict()
@@ -959,6 +992,62 @@ class LedgerService:
             },
             "notes": summaries["primary"]["notes"],
         }
+
+    def _anchor_state(self) -> dict[str, Any]:
+        """Expose the learned cost anchor so the dashboard can explain it."""
+
+        anchor = self._cost_anchor
+        if anchor is None or not anchor.usable:
+            return {"active": False}
+        return {
+            "active": True,
+            "updated_at_ms": anchor.updated_at_ms,
+            "updated_at": (
+                iso_from_ms(anchor.updated_at_ms)
+                if anchor.updated_at_ms
+                else ""
+            ),
+            "global_rate_usd_per_million": round(
+                anchor.global_rate_usd_per_million, 6
+            ),
+            "model_count": len(anchor.model_rates_usd_per_million),
+            "costed_events": anchor.costed_events,
+            "costed_tokens": anchor.costed_tokens,
+            "known_usd": round(anchor.known_usd, 6),
+        }
+
+    def _anchor_note_for(self, events: list[UsageEvent]) -> str:
+        """Explain the anchor only when the snapshot lost every real cost."""
+
+        anchor = self._cost_anchor
+        if anchor is None or not anchor.usable:
+            return ""
+        if any(event.cost_usd is not None for event in events):
+            return ""
+        when = (
+            iso_from_ms(anchor.updated_at_ms)
+            if anchor.updated_at_ms
+            else "此前"
+        )
+        return (
+            f"本次扫描没有发现带实收费用的记录，参考费用沿用 {when} 学习的"
+            f"单价锚点（来自 {anchor.costed_events:,} 条实采记录、约 "
+            f"${anchor.global_rate_usd_per_million:,.3f}/百万 Token），"
+            "避免退回占位价格；锚点保存在数据目录的 cost_anchor_v1.json。"
+        )
+
+    def _learn_cost_anchor(self, events: list[UsageEvent]) -> None:
+        """Merge learnable rates into the anchor and persist them."""
+
+        derived = derive_cost_anchor(events, updated_at_ms=now_ms())
+        if derived is None:
+            return
+        with self._lock:
+            merged = merge_cost_anchors(self._cost_anchor, derived)
+            if merged is None:
+                return
+            save_cost_anchor(self._cost_anchor_path, merged)
+            self._cost_anchor = merged
 
 
 class LedgerRequestHandler(http.server.BaseHTTPRequestHandler):
