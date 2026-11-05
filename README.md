@@ -2,6 +2,9 @@
 
 **中文** | [English](README.en.md)
 
+[![Windows 10/11 x64](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078d4?logo=windows11&logoColor=white)](#运行环境)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776ab?logo=python&logoColor=white)](pyproject.toml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![CI](https://github.com/wakeup595626-cmyk/agent-token-ledger/actions/workflows/ci.yml/badge.svg)](https://github.com/wakeup595626-cmyk/agent-token-ledger/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/wakeup595626-cmyk/agent-token-ledger)](https://github.com/wakeup595626-cmyk/agent-token-ledger/releases)
 
